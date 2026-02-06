@@ -1,0 +1,329 @@
+---
+title: "06_BIO_analysis"
+output: html_document
+date: "2026-02-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(performance)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(data.table)
+library(mgcv)
+library(sp)
+library(sf)
+library(lmtest)
+library(ggpubr)
+library(viridis)
+library(glmmTMB)
+```
+
+
+
+
+## read in data
+
+```{r}
+finaldata<-fread("outputs/full-data/finaldata.csv", header=T, sep=",")
+finaldata$dayofweek <- as.factor(finaldata$dayofweek)
+finaldata$site <- as.factor(finaldata$site)
+str(finaldata)
+
+finaldata$datetime <- ymd_hms(finaldata$datetime)
+str(finaldata)
+
+#scaling parameters
+#hrfromsunrise - divide by 13.8095
+hrfromsunrisescale <- 13.8095
+#julian - divide by 158.1123
+julianscale <- 158.1123
+#logKelvindist - divide by 5.046928
+logKelvindistscale <- 5.046928
+#Clydedistkm - divide by 8.172523
+Clydedistkmscale <- 8.172523
+#prop_urban - divide by 0.6215798
+prop_urbanscale <- 0.6215798
+#dist_majorroad - divide by 409.4769
+dist_majorroadscale <- 409.4769
+#streetlight_density - divide by 23.69028
+streetlight_densityscale <- 23.69028
+#sitetemp - divide by 0.4687951
+sitetemp_scale <- 0.4687951
+
+#kelvindist - divide by 288.4527
+Kelvindistscale <- 288.4527
+
+#read in point data from GIS to use for spatial predictions
+pointdata<-fread("data/buffer_point_data.csv", header=T, sep=",")
+#format variables correctly - rescaling etc
+pointdata$logKelvindist <- log(pointdata$kelvindist)
+pointdata$Clydedistkm <- pointdata$clydedist / 1000
+pointdata$Kelvindistr <- pointdata$kelvindist / Kelvindistscale
+pointdata$Clydedistkmr <- pointdata$Clydedistkm / Clydedistkmscale
+pointdata$prop_urbanr <- pointdata$urbanprop / prop_urbanscale
+pointdata$dist_majorroadr <- pointdata$roaddist / dist_majorroadscale
+pointdata$streetlight_densityr <- pointdata$light_dens / streetlight_densityscale
+
+#make base data frame for predictions
+basedf <- subset(pointdata, select = c(Kelvindistr, Clydedistkmr, prop_urbanr, dist_majorroadr, streetlight_densityr, X, Y, site))
+
+#add temp resid
+tempresid <- read.csv("outputs/full-data/tempresid.csv", header=TRUE, sep=",")
+tempresid$site <- as.factor(tempresid$site)
+tempresid <- subset(tempresid, select = c(site, sitetemp))
+
+basedf <- merge(basedf, tempresid, by = "site")
+basedf$sitetempr <- basedf$sitetemp / sitetemp_scale
+
+## read in Kelvin shapefile
+kelvin <- st_read("kelvin_corridor_acoustic/data/environmental_variables/shapefiles/Kelvin.shp")
+
+#clyde
+clyde <- st_read("kelvin_corridor_acoustic/data/environmental_variables/shapefiles/Clyde.shp")
+
+#major roads shapefile
+majorroad <- st_read("kelvin_corridor_acoustic/data/environmental_variables/shapefiles/major_roads.shp")
+
+#streetlights
+streetlight <- st_read("kelvin_corridor_acoustic/data/environmental_variables/shapefiles/streetlightshp.shp")
+
+#kelvin variables
+finaldata$Kelvindist <- exp(finaldata$logKelvindist)
+finaldata$Kelvindistr <- scale(finaldata$Kelvindist,center=FALSE)
+
+
+```
+
+
+
+
+
+```{r}
+finaldata2 <- transform(finaldata,Kelvindist2=scale(Kelvindist),Clydedistkm2=scale(Clydedistkm),julian2=scale(julian),hrfromsunrise2=scale(hrfromsunrise),prop_urban2=scale(prop_urban))
+
+
+#initial global model
+biors1 <- gam(BIO ~  julian2 + Kelvindist2 + prop_urban2 + Kelvindist2*prop_urban2 + Clydedistkm2 +  dayofweek+ s(hrfromsunrise2,bs = "cc", k = 12)+ s(hrfromsunrise2,bs = "cc", k = 12, by = prop_urban2) + s(site, bs = 're'), knots = list(hrfromsunrise2 = c(0,24)), data = finaldata2, family=Gamma(link=log))
+
+#check collinearity
+check_collinearity(biors1)
+
+### test significance of kelvin*urban interaction
+biors2 <- gam(BIO ~  julian2 + Kelvindist2 + prop_urban2 + Clydedistkm2 +  dayofweek+ s(hrfromsunrise2,bs = "cc", k = 12)+ s(hrfromsunrise2,bs = "cc", k = 12, by = prop_urban2) + s(site, bs = 're'), knots = list(hrfromsunrise2 = c(0,24)), data = finaldata2, family=Gamma(link=log))
+summary(biors2)
+
+
+AIC(biors1,biors2)
+
+
+###examine residuals 
+hist(resid(biors2))
+biors2resid <- simulateResiduals(fittedModel = biors2,re.form=NA)
+plotQQunif(biors2resid)
+plotResiduals(biors2resid)
+
+```
+
+
+
+
+## plot model outputs
+
+```{r}
+kelvindist2 <- scale(finaldata$Kelvindist)
+attributes(kelvindist2)
+#to unscale, first multiply by scaling parameter (171.9783), then add centering paramter(231.5774)
+##plot distance from kelvin
+bioknsdf2 = data.frame(Kelvindist2 =rep(seq(min(finaldata2$Kelvindist2 ), max(finaldata2$Kelvindist2),by=0.01),length=1998),julian2  =rep(mean(finaldata2$julian2),length=1998),hrfromsunrise2 =rep(mean(finaldata2$hrfromsunrise2 ),length=1998),site="E1",prop_urban2 =rep(mean(finaldata2$prop_urban2),length=1998),Clydedistkm2 =rep(mean(finaldata2$Clydedistkm2),length=1998),dayofweek ="weekday")
+bioknspreds2<-predict(biors1,newdata=bioknsdf2, se.fit=TRUE,type="response")
+bioknspreds2<-as.data.frame(bioknspreds2)
+bioknsdf2$preds<-bioknspreds2$fit
+#add variables for confidence intervals - 2 standard errors
+bioknsdf2$minse<-bioknspreds2$fit-2*(bioknspreds2$se.fit)
+bioknsdf2$maxse<-bioknspreds2$fit+2*(bioknspreds2$se.fit)
+bioknsdf2$Kelvindist<-(bioknsdf2$Kelvindist2*171.9783)+231.5774
+
+
+
+kelvinp1<-ggplot(bioknsdf2,aes(x=Kelvindist,y=preds))+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.25) +
+  geom_line(linewidth = 1.25)+
+  theme_classic()+
+  xlab("Distance from Riparian Corridor (m)")+
+  ylab("BIO")+
+  theme(legend.title = element_text(size=13))+
+  theme(legend.text = element_text(size=13))+
+  guides(color = guide_legend(override.aes = list(linewidth = 3)))+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))+
+  theme(legend.key.size = unit(0.7, 'cm'))
+kelvinp1
+
+ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/BIO/riparian_corridor_fig.png",
+       plot = kelvinp1,
+       device = "png",
+       width = 18,
+       height = 12,
+       units = "cm",
+       dpi = 300,
+       bg = "white")
+```
+
+
+#### time * urban
+
+```{r}
+
+##plot distance from major road over time of day
+bioknsdf1 = data.frame(hrfromsunrise2 =rep(seq(min(finaldata2$hrfromsunrise2), max(finaldata2$hrfromsunrise2),by=0.01),length=1998),julian2 =rep(mean(finaldata2$julian2),length=1998),Kelvindist2 =rep(mean(finaldata2$Kelvindist2),length=1998),site="E1",prop_urban2= rep(c(min(finaldata2$prop_urban2),mean(finaldata2$prop_urban2),max(finaldata2$prop_urban2)),times=666),Clydedistkm2 =rep(mean(finaldata2$Clydedistkm2 ),length=1998),dayofweek ="weekday")
+bioknspreds1<-predict(biors1,newdata=bioknsdf1, se.fit=TRUE,type="response")
+bioknspreds1<-as.data.frame(bioknspreds1)
+bioknsdf1$preds<-bioknspreds1$fit
+#add variables for confidence intervals - 2 standard errors
+bioknsdf1$minse<-bioknspreds1$fit-2*(bioknspreds1$se.fit)
+bioknsdf1$maxse<-bioknspreds1$fit+2*(bioknspreds1$se.fit)
+bioknsdf1$prop_urban2<-as.factor(bioknsdf1$prop_urban2)
+hrfromsunrise2 <- scale(finaldata$hrfromsunrise)
+attributes(hrfromsunrise2)
+bioknsdf1$hrfromsunrise<-(bioknsdf1$hrfromsunrise2*6.938426)+11.93983
+
+
+timeurbanp1<-ggplot(bioknsdf1,aes(x=hrfromsunrise,y=preds,group=prop_urban2))+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse, fill = prop_urban2),alpha=0.25) +
+  geom_line(aes(col=prop_urban2), linewidth = 1.25)+
+  theme_classic()+
+  xlab("Hours from Sunrise")+
+  ylab("BIO")+
+  scale_color_manual(name = "Proportion of\nUrban Land", labels = c("0 (min)", "0.45 (mean)", "1 (max)"), values = c("#7ad151", "#2a788e", "#440154"))+
+  scale_fill_manual(guide = 'none',values=c("#7ad151", "#2a788e", "#440154"))+
+  theme(legend.title = element_text(size=13))+
+  theme(legend.text = element_text(size=13))+
+  guides(color = guide_legend(override.aes = list(linewidth = 3)))+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))+
+  theme(legend.key.size = unit(0.7, 'cm'))+
+  scale_x_continuous(limits = c(0, 24), breaks = seq(0, 24, by = 4))
+timeurbanp1
+
+
+ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/BIO/time_urban_fig.png",
+       plot = timeurbanp1,
+       device = "png",
+       width = 18,
+       height = 12,
+       units = "cm",
+       dpi = 300,
+       bg = "white")
+```
+
+
+
+####miscellaneous plots
+
+```{r}
+##plot for distance from Clyde
+bioknsdf3 = data.frame(Clydedistkm2 =rep(seq(min(finaldata2$Clydedistkm2 ), max(finaldata2$Clydedistkm2),by=0.01),length=1998),hrfromsunrise2 =rep(mean(finaldata2$hrfromsunrise2),length=1998),Kelvindist2 =rep(mean(finaldata2$Kelvindist2),length=1998),prop_urban2 =rep(mean(finaldata2$prop_urban2),length=1998),site="E1",julian2 =rep(mean(finaldata2$julian2),length=1998),dayofweek ="weekday")
+bioknspreds3<-predict(biors1,newdata=bioknsdf3, se.fit=TRUE,type="response")
+bioknspreds3<-as.data.frame(bioknspreds3)
+bioknsdf3$preds<-bioknspreds3$fit
+#add variables for confidence intervals - 2 standard errors
+bioknsdf3$minse<-bioknspreds3$fit-2*(bioknspreds3$se.fit)
+bioknsdf3$maxse<-bioknspreds3$fit+2*(bioknspreds3$se.fit)
+clydedist2 <- scale(finaldata$Clydedistkm)
+attributes(clydedist2)
+bioknsdf3$Clydedistkm<-(bioknsdf3$Clydedistkm2*4.315721)+6.941029
+
+
+clydeplot2<-ggplot(bioknsdf3,aes(x=Clydedistkm,y=preds))+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  geom_line()+
+  theme_classic()+
+  xlab("Upstream Distance (km)")+
+  ylab("BIO")+
+  scale_fill_discrete(guide = 'none')+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))
+clydeplot2
+
+
+
+ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/BIO/BIO_upstream_dist_fig.png",
+       plot = clydeplot2,
+       device = "png",
+       width = 20,
+       height = 15,
+       units = "cm",
+       dpi = 300,
+       bg = "white")
+
+
+
+## plot for julian day
+bioknsdf4 = data.frame(julian2 =rep(seq(min(finaldata2$julian2), max(finaldata2$julian2),by=0.01),length=1998),hrfromsunrise2 =rep(mean(finaldata2$hrfromsunrise2),length=1998),Kelvindist2 =rep(mean(finaldata2$Kelvindist2),length=1998),prop_urban2 =rep(mean(finaldata2$prop_urban2),length=1998),site="E1",Clydedistkm2 =rep(mean(finaldata2$Clydedistkm2),length=1998),dayofweek ="weekday")
+bioknspreds4<-predict(biors1,newdata=bioknsdf4, se.fit=TRUE,type="response")
+bioknspreds4<-as.data.frame(bioknspreds4)
+bioknsdf4$preds<-bioknspreds4$fit
+#add variables for confidence intervals - 2 standard errors
+bioknsdf4$minse<-bioknspreds4$fit-2*(bioknspreds4$se.fit)
+bioknsdf4$maxse<-bioknspreds4$fit+2*(bioknspreds4$se.fit)
+julian2 <- scale(finaldata$julian)
+attributes(julian2)
+bioknsdf4$julian<-(bioknsdf4$julian2*46.81458)+151.1769
+
+
+julianplot2<-ggplot(bioknsdf4,aes(x=julian,y=preds))+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  geom_line()+
+  theme_classic()+
+  xlab("Day of Year")+
+  ylab("BIO")+
+  scale_fill_discrete(guide = 'none')+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))+
+  scale_x_continuous(breaks=c(100,150,200),labels=c("10/04","30/05","19/07"))
+julianplot2
+
+
+## plot for day of week
+bioknsdf5 = data.frame(dayofweek =rep(levels(finaldata2$dayofweek),times=999),hrfromsunrise2 =rep(mean(finaldata2$hrfromsunrise2),length=1998),julian2 =rep(mean(finaldata2$julian2),length=1998),site="E1",Kelvindist2 =rep(mean(finaldata2$Kelvindist2),length=1998),prop_urban2 =rep(mean(finaldata2$prop_urban2),length=1998),Clydedistkm2 =rep(mean(finaldata2$Clydedistkm2),length=1998))
+bioknspreds5<-predict(biors1,newdata=bioknsdf5, se.fit=TRUE,type="response")
+bioknspreds5<-as.data.frame(bioknspreds5)
+bioknsdf5$preds<-bioknspreds5$fit
+#add variables for confidence intervals - 2 standard errors
+bioknsdf5$minse<-bioknspreds5$fit-2*(bioknspreds5$se.fit)
+bioknsdf5$maxse<-bioknspreds5$fit+2*(bioknspreds5$se.fit)
+
+
+weekdayplot2<-ggplot(bioknsdf5,aes(x=dayofweek,y=preds))+
+  geom_point(size=2.5)+
+  geom_errorbar(aes(ymin=minse, ymax=maxse), linetype=1,width=0.1) +
+  theme_classic()+
+  xlab("Day of Week")+
+  ylab("BIO")+
+  scale_fill_discrete(guide = 'none')+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))+
+  scale_x_discrete(breaks=c("weekday","weekend"),labels=c("Weekday","Weekend"))
+weekdayplot2
+
+
+finalplot2 = ggarrange(julianplot2, weekdayplot2, ncol = 2, labels = c("A", "B"))
+finalplot2
+
+ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/BIO/BIO_misc_effects_fig.png",
+       plot = finalplot2,
+       device = "png",
+       width = 20,
+       height = 15,
+       units = "cm",
+       dpi = 300,
+       bg = "white")
+
+
+```
+
+
+
+

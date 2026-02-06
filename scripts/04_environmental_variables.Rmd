@@ -1,0 +1,795 @@
+---
+title: "04_environmental_variables"
+output: html_document
+date: "2026-02-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(data.table)
+library(lme4)
+library(lmtest)
+library(suntools)
+library(betareg)
+library(circular)
+library(data.table)
+library(glmmTMB)
+library(betareg)
+library(mgcv)
+library(circular)
+```
+
+
+
+
+# read in data
+
+```{r}
+indices<- fread("kelvin_corridor_acoustic/outputs/full-data/allindices.csv", header=T, sep="," )
+
+indicesdf<-subset(indices,select=-c(V1,X,name,file))
+#replace NA values in time variable with 00:00:00
+indicesdf$time[is.na(indicesdf$time)] <- "00:00:00"
+#make time variable as seconds after midnight
+indicesdf$ntime<-as.numeric(hms(indicesdf$time))
+
+#make date variable
+indicesdf$date<-substring(indicesdf$datetime,1,10)
+indicesdf$date<-ymd(indicesdf$date)
+#make julian date variable
+indicesdf$julian <- strftime(indicesdf$date, format = "%j")
+indicesdf$julian<-as.numeric(indicesdf$julian)
+
+#convert NDSI to values between 0 and 1 rather than -1 and 1
+indicesdf$NDSIoriginal<-indicesdf$NDSI
+indicesdf$NDSI<-(indicesdf$NDSI+1)/2
+
+indicesdf$site<-as.factor(indicesdf$site)
+
+```
+
+
+
+## read in GIS site data
+
+```{r}
+sitedata<- fread("kelvin_corridor_acoustic/data/environmental_variables/GIS-site-data.csv", header=T, sep="," )
+sitedata$site<-as.factor(sitedata$site)
+
+indicesdf<-merge(indicesdf,sitedata,by="site")
+
+#remove rows with NA values
+indicesdf<-indicesdf[complete.cases(indicesdf), ]
+
+
+indicesdf$timemin<-(indicesdf$ntime)/60
+indicesdf$timehr<-(indicesdf$timemin)/60
+indicesdf$ntime2<-(indicesdf$ntime)^2
+indicesdf$timehr2<-(indicesdf$timehr)^2
+
+#log transform kelvindist
+indicesdf$logKelvindist<-log(indicesdf$Kelvindist)
+
+indicesdf$Clydedistkm<-indicesdf$Clydedist/1000
+
+```
+
+
+
+## land cover data
+
+```{r}
+lcdata<- read.csv("kelvin_corridor_acoustic/data/environmental_variables/land_cover_2.csv", header=T, sep="," )
+
+lc2<-lcdata[,2:13]
+
+lc2 <- asin(sqrt(lc2[,1:12]/100))
+
+lc2pca <- prcomp(lc2, scale=T)
+summary(lc2pca)
+
+plot(lc2pca, type="lines")
+lc2pca$rotation
+lc2pcload<-as.data.frame(round(lc2pca$rotation*100))
+
+lcPC <- data.frame(lc2pca$x)
+plot(lcPC$PC1, lcPC$PC2)
+
+lc3<-cbind(lcdata$site,lcPC)
+lc3$site<-lc3$`lcdata$site`
+lc4<-subset(lc3,select=c(site,PC1,PC2,PC3,PC4))
+lc4$site<-as.factor(lc4$site)
+indicesdf<-merge(indicesdf,lc4,by="site")
+
+lcdata$site<-as.factor(lcdata$site)
+indicesdf<-merge(indicesdf,lcdata,by="site")
+```
+
+
+
+
+
+
+
+
+
+
+## Met Office data from Bishopton weather station
+
+```{r}
+t1<-read.csv("temp/Bishopton March-April.csv", header=T, sep="," ) 
+t2<-read.csv("temp/Bishopton April-May.csv", header=T, sep="," ) 
+t3<-read.csv("temp/Bishopton May-June.csv", header=T, sep="," ) 
+t4<-read.csv("temp/Bishopton June-July.csv", header=T, sep="," ) 
+t5<-read.csv("temp/Bishopton July-August.csv", header=T, sep="," ) 
+t6<-read.csv("temp/Bishopton August-September.csv", header=T, sep="," ) 
+
+allt<-rbind(t1,t2,t3,t4,t5,t6)
+allt$date<-substr(allt$Report.Date...Time,1,10)
+allt$time<-substr(allt$Report.Date...Time,12,16)
+allt$timet<-allt$time
+allt[allt == "" | allt == " "] <- NA  # Replace blank & space by NA
+allt$timet[is.na(allt$timet)] <- "00:00"
+allt$datetime<-paste(allt$date,allt$timet,sep="_")
+allt$datetime<-dmy_hm(allt$datetime)
+
+metdata<-subset(allt,select=c(datetime,Air.Temperature,Relative.Humidity))
+```
+
+
+
+## read in temperature logger data
+
+```{r}
+tempdata<- fread("data/environmental_variables/Kestrel_data_cleaned.csv", header=T, sep="," )
+
+
+tempdata2<-subset(tempdata,select=c(DateTime,ID,Temp,Rel.Humidity))
+tempdata2$datetime<-tempdata2$DateTime
+
+alltemps<-merge(tempdata2,metdata,by="datetime")
+
+alltemps$site<-as.factor(alltemps$ID)
+
+min(alltemps$datetime)
+indicesdft<-merge(indicesdf,metdata,by="datetime",all=T)
+```
+
+
+
+## analysis
+
+```{r}
+tmod1<-lm(Temp~Air.Temperature+site*Air.Temperature*site,data=alltemps)
+summary(tmod1)
+hist(resid(tmod1))
+plot(tmod1)
+
+tmod2<-glmmTMB(Temp~Air.Temperature+site*Air.Temperature*site,family=Gamma(link="log"),data=alltemps,REML=FALSE)
+summary(tmod2)
+hist(resid(tmod2))
+tmod2resid <- simulateResiduals(fittedModel = tmod2,re.form=NA)
+plotQQunif(tmod2resid)
+plotResiduals(tmod2resid)
+
+AIC(tmod1,tmod2)
+
+
+hmod1<-lm(Rel.Humidity~Relative.Humidity+site*Relative.Humidity*site,data=alltemps)
+summary(hmod1)
+hist(resid(hmod1))
+plot(hmod1)
+```
+
+
+
+## predict temperatures for full indices data set using linear model
+
+```{r}
+temppreds<-predict(tmod1,newdata=indicesdft, se.fit=TRUE,type="response")
+temppreds<-as.data.frame(temppreds)
+
+indicesdft$tpred<-temppreds$fit
+#add variables for standard errors
+indicesdft$minse<-temppreds$fit-(temppreds$se.fit)
+indicesdft$maxse<-temppreds$fit+(temppreds$se.fit)
+
+
+
+#predict humidity values
+hpreds<-predict(hmod1,newdata=indicesdft, se.fit=TRUE,type="response")
+hpreds<-as.data.frame(hpreds)
+
+indicesdft$hpred<-hpreds$fit
+```
+
+
+
+## check correlation between temperature from met office data and predicted temperature
+
+```{r}
+cor.test(indicesdft$Air.Temperature,indicesdft$tpred)
+#correlation between humidity predicted and observed from met office
+cor.test(indicesdft$Relative.Humidity,indicesdft$hpred)
+
+#add temperature data from temperature loggers
+indicesdf2temph<-subset(indicesdf2,select=c(sitedatetime,Temp,Rel.Humidity))
+indicesdft$sitedatetime<-paste(indicesdft$site,indicesdft$datetime,sep="-")
+
+indicesdftsub=merge(indicesdf2temph,indicesdft,by="sitedatetime")
+
+#correlation between observed from temperature loggers and predicted
+cor.test(indicesdftsub$Temp,indicesdftsub$tpred)
+cor.test(indicesdftsub$Rel.Humidity,indicesdftsub$hpred)
+```
+
+
+## make data set of indices without temperature logger data
+
+```{r}
+indicesdfmin<-filter(indicesdf,!datetime%in%c(indicesdf2$datetime))
+indicesdfmin$sitedatetime<-paste(indicesdfmin$site,indicesdfmin$datetime,sep="-")
+
+indicesdft$Temp<-indicesdft$tpred
+indicesdft$Rel.Humidity<-indicesdft$hpred
+indicesdft2<-subset(indicesdft,select=c(sitedatetime,Temp,Rel.Humidity))
+
+indicesdfmin2<-merge(indicesdfmin,indicesdft2,by="sitedatetime")
+indicesdfmin2$pred<-"Y"
+
+indicesdf2
+
+
+#data set with predicted temperature
+#remove datetimehour
+indicesdfmin2<-subset(indicesdfmin2,select=-c(datetimehour))
+
+
+#data set with temperature logger data
+#add pred variable
+indicesdf2$pred<-"N"
+#remove Station.Pressure and Dew.Point
+indicesdf2<-subset(indicesdf2,select=-c(Station.Pressure,Dew.Point))
+#remove datetimehour and Heat.Index and Density.Altitude
+indicesdf2<-subset(indicesdf2,select=-c(Heat.Index,Density.Altitude))
+indicesdf2<-subset(indicesdf2,select=-c(datetimehour))
+
+
+allindices<-rbind(indicesdfmin2,indicesdf2)
+
+
+## write full data as csv
+write.csv(allindices,"kelvin_corridor_acoustic/outputs/full-data/allindices2.csv")
+```
+
+
+
+
+
+
+
+
+# compile all data
+
+
+## read in data with simulated temperature and humidity values
+
+```{r}
+allindices2<-fread("outputs/full-data/allindices2.csv", header=T, sep=",")
+str(allindices2)
+
+##add in new clyde distance (river distance)
+sitedata<- fread("data/environmental_variables/all_site_data.csv", header=T, sep="," )
+sitedata$site<-as.factor(sitedata$site)
+sitedataclyde<-subset(sitedata,select=c(site,newClydedist0,newClydedist2))
+allindices2<-merge(allindices2,sitedataclyde,by="site",all=T)
+allindices2$Clydedistkm<-allindices2$newClydedist0/1000
+allindices2$Clydedist2km<-allindices2$newClydedist2/1000
+
+##rescale variables
+allindices2<-as.data.frame(allindices2)
+allindices2  <- transform(allindices2,logKelvindistr=scale(logKelvindist,center=FALSE),Clydedistkmr=scale(Clydedistkm,center=FALSE),julianr=scale(julian,center=FALSE),timehrr=scale(timehr,center=FALSE),Elevationr=scale(Elevation,center=FALSE),Tempr=scale(Temp,center=FALSE),Rel.Humidityr=scale(Rel.Humidity,center=FALSE),dist_streetlightr=scale(dist_streetlight,center=FALSE),prop_woodlandr=scale(prop_woodland,center=FALSE),prop_wetlandr=scale(prop_wetland,center=FALSE),prop_urbanr=scale(prop_urban,center=FALSE),prop_grasslandr=scale(prop_grassland,center=FALSE),prop_arabler=scale(prop_arable,center=FALSE),dist_allotmentr=scale(dist_allotment,center=FALSE),dist_cemeteryr=scale(dist_cemetery,center=FALSE),dist_parksr=scale(dist_parks,center=FALSE),dist_motorwayr=scale(dist_motorway,center=FALSE),dist_majorroadr=scale(dist_majorroad,center=FALSE),dist_minorroadr=scale(dist_minorroad,center=FALSE),dist_canalr=scale(dist_canal,center=FALSE),dist_laker=scale(dist_lake,center=FALSE),dist_riverr=scale(dist_river,center=FALSE),streetlight_densityr=scale(streetlight_density,center=FALSE))
+
+
+allindices3<-allindices2[complete.cases(allindices2), ]
+
+
+
+
+
+
+## create variable for time from sunrise
+
+
+#try making data frame with full list of dates, 1 coordinate for all sites, and add to full data frame - subset those which have times before sunrise and adjust the date to correspond with the previous day so they have the previous day's sunrise time
+
+#data frame of list of all dates
+datetimes<-allindices3$datetime
+datetimes<-dmy_hm(datetimes)
+min(datetimes)
+max(datetimes)
+dates<-seq.Date(from = as.Date("2023-03-10 UTC"), to = as.Date(max(datetimes)), by = 'days') 
+str(dates)
+datesp<-as.POSIXct(dates)
+
+#spatial points object of average lat long
+mean(allindices3$lon)
+mean(allindices3$lat)
+coord <- matrix(c(mean(allindices3$lon), 
+mean(allindices3$lat)), nrow=1)
+  Coord <- sp::SpatialPoints(coord, proj4string=sp::CRS("+proj=longlat +datum=WGS84"))
+  
+  #calculate sunrise time for each day
+st3<-sunriset(
+coord,
+datesp,
+direction = "sunrise",
+POSIXct.out=TRUE
+)
+
+#separate first 16 rows (before daylight savings) and rows 17-173 (british summer time)
+st31<-st3[1:16,]
+st32<-st3[17:173,]
+st32$time<-st32$time-3600
+
+#entire data set in GMT
+st4<-rbind(st31,st32)
+st4$date<-as.Date(st4$time)
+st4$sunrise<-st4$time
+st4<-subset(st4,select=c(sunrise,date))
+
+allindices3$date<-as.Date(allindices3$date,"%d/%m/%Y")
+
+#166025
+allindices4<-merge(allindices3,st4,by="date")
+allindices4$datetime<-dmy_hm(allindices4$datetime)
+allindices4$diff<-allindices4$datetime-allindices4$sunrise
+allindices4$diffn<-as.numeric(allindices4$diff)
+
+prevday<-filter(allindices4,diffn<=0)
+sameday<-filter(allindices4,diffn>0)
+
+prevday$date<-prevday$date-1
+prevday<-subset(prevday,select=-c(sunrise))
+prevday<-merge(prevday,st4,by="date")
+
+allindices5<-rbind(prevday,sameday)
+allindices5$timefromsunrise<-allindices5$datetime-allindices5$sunrise
+allindices5$minfromsunrise<-as.numeric(allindices5$timefromsunrise)/60
+allindices5$hrfromsunrise<-as.numeric(allindices5$minfromsunrise)/60
+hist(allindices5$hrfromsunrise)
+
+p <- 24
+indicesdf5rs  <- transform(allindices5,minfromsunriser=scale(minfromsunrise,center=FALSE),hrfromsunriser=scale(hrfromsunrise,center=FALSE))
+max(indicesdf5rs$minfromsunrise)
+
+#days getting longer by ~10 minutes each day during study period
+#try periodicity of both 24 hours and 24.167 hours (1450 minutes)
+
+#scaling of minfromsunrise divides by 828.5704
+#scaling of hrfromsunrise divides by 13.8095
+#scaling of timehr divides by 13.66089
+
+#24 hours, rescaled by timehr
+prs<-24/13.66089
+
+#24 hours, rescaled by hrfromsunrise 
+pshrs<-24/13.8095
+#24.167 hours, rescaled by hrfromsunrise
+pshrso<-24.167/13.8095
+
+
+indicesdf5rs<- indicesdf5rs %>% 
+  group_by(site,date) %>% 
+  arrange(hrfromsunriser, .by_group = TRUE) %>% 
+  mutate(time_ordinal = row_number()) 
+
+
+indicesdf5rs$time_ordinalfac<-as.factor(indicesdf5rs$time_ordinal)
+
+
+## model temp/humidity ~ time + day + (1|site) to get random effect term for each site to use as explanatory variable in big models
+
+##temperature
+tempmod1 <- lmer(Temp ~ hrfromsunrise + julian + (1|site), data = indicesdf5rs)
+summary(tempmod1)
+hist(resid(tempmod1))
+plot(tempmod1)
+ranef(tempmod1)
+sitetemp <- (ranef(tempmod1))$site
+sitetemp$sitetemp <- sitetemp$`(Intercept)`
+sitetemp$site <- rownames(sitetemp)
+sitetempdf <- subset(sitetemp, select = c("site", "sitetemp"))
+sitetempdf$site <- as.factor(sitetempdf$site)
+
+hummod1 <- lmer(Rel.Humidity ~ hrfromsunrise + julian + (1|site), data = indicesdf5rs)
+summary(hummod1)
+hist(resid(hummod1))
+plot(hummod1)
+ranef(hummod1)
+sitehum <- (ranef(hummod1))$site
+sitehum$sitehum <- sitehum$`(Intercept)`
+sitehum$site <- rownames(sitehum)
+sitehumdf <- subset(sitehum, select = c("site", "sitehum"))
+sitehumdf$site <- as.factor(sitehumdf$site)
+
+siteenv <- merge(sitetempdf, sitehumdf, by = "site")
+
+
+
+indicesdf5rs <- merge(indicesdf5rs, siteenv, by = "site", all = TRUE)
+
+
+indicesdf5rs  <- transform(indicesdf5rs,sitetempr=scale(sitetemp,center=FALSE),sitehumr=scale(sitehum,center=FALSE))
+
+days <- wday(indicesdf5rs$datetime)
+#dates are one day forward - day of week 3 is actually day of week 2
+days2 <- days-1
+
+
+days2[days2 == '0'] <- '7'
+days2 <- as.numeric(days2)
+daysdf <- as.data.frame(days2)
+
+daysdf$dayofweek <- case_when(
+  days2 < 6 ~ "weekday",
+  days2 == 6 ~ "weekend"
+)
+
+dow <- subset(daysdf, select = c("dayofweek"))
+
+indicesdf5rs$dayofweek <- dow$dayofweek
+indicesdf5rs$dayofweek <- as.factor(indicesdf5rs$dayofweek)
+
+indicesdf5rs$sitedate <- paste(indicesdf5rs$site, indicesdf5rs$date, sep = "-")
+indicesdf5rs$sitedate <- as.factor(indicesdf5rs$sitedate)
+
+
+#data set for gams - remove unnecessary variables
+indicesdf5rssub <- subset(indicesdf5rs, select = c(BIO, hrfromsunrise, hrfromsunriser, julian, julianr, prop_urban, prop_urbanr, dist_majorroad, dist_majorroadr, streetlight_density, streetlight_densityr, logKelvindist, logKelvindistr, Clydedistkm, Clydedistkmr, dayofweek, datetime, site, sitetempr))
+#write.csv(indicesdf5rssub,"kelvin_corridor_acoustic/outputs/full-data/finaldata.csv")
+
+#write.csv(siteenv,"kelvin_corridor_acoustic/outputs/full-data/tempresid.csv")
+
+
+```
+
+
+
+
+
+
+
+## road distance ~ noise level correlation
+
+```{r}
+noise <- read.csv("data/environmental_variables/Noise values sites Glasgow.csv", header = TRUE, sep = ",")
+noise$site <- as.factor(noise$site)
+sitedata <- read.csv("data/all_site_data.csv", header = TRUE, sep = ",")
+sitedata$site <- as.factor(sitedata$site)
+
+noise2 <- subset(noise, select = c(site, mean_noise))
+sitedata2 <- subset(sitedata, select = c(site, dist_majorroad))
+
+sitenoise <- merge(noise2, sitedata2, by = "site")
+
+hist(sitenoise$dist_majorroad)
+cor.test(sitenoise$mean_noise, sitenoise$dist_majorroad, method = "spearman")
+```
+
+
+
+
+
+
+
+
+
+# correlation matrix of explanatory variables
+
+```{r}
+ex <- read.csv("data/site_data_tidy.csv", sep = ",", header = TRUE)
+```
+
+
+### subset to relevant variables
+
+Kelvindist, prop_urban, dist_majorroad, streetlight_density, Clydedist
+
+
+```{r}
+ex2 <- subset(ex, select = c("Kelvindist", "prop_urban", "dist_majorroad", "streetlight_density", "Clydedist"))
+
+ex2 <- rename(ex2, dist_riparian = "Kelvindist", upstream_dist = "Clydedist")
+```
+
+
+correlation matrix
+
+```{r}
+mat <- round(cor(ex2),2)
+```
+
+
+### heatmap
+
+```{r}
+library(reshape2)
+mat2 <- melt(mat)
+head(mat2)
+
+ggplot(data = mat2, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile()
+```
+
+
+tidy
+
+```{r}
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(mat){
+    mat[upper.tri(mat)] <- NA
+    return(mat)
+  }
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(mat){
+    mat[lower.tri(mat)]<- NA
+    return(mat)
+  }
+  
+  upper_tri <- get_upper_tri(mat)
+upper_tri
+
+
+
+
+# Melt the correlation matrix
+mat3 <- melt(upper_tri, na.rm = TRUE)
+
+
+# Heatmap
+ggplot(data = mat3, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_classic()+ 
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+```
+
+
+
+```{r}
+reorder_mat <- function(mat){
+# Use correlation between variables as distance
+dd <- as.dist((1-mat)/2)
+hc <- hclust(dd)
+mat <-mat[hc$order, hc$order]
+}
+
+
+# Reorder the correlation matrix
+mat <- reorder_mat(mat)
+upper_tri <- get_upper_tri(mat)
+# Melt the correlation matrix
+mat4 <- melt(upper_tri, na.rm = TRUE)
+# Create a ggheatmap
+ggheatmap <- ggplot(mat4, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+# Print the heatmap
+print(ggheatmap)
+
+
+correlationmatrix <- ggheatmap + 
+geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5))
+
+
+ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/correlation_matrix.png",
+       plot = correlationmatrix,
+       device = "png",
+       width = 18,
+       height = 12,
+       units = "cm",
+       dpi = 300,
+       bg = "white")
+```
+
+
+
+
+# maps of environmental variables
+
+
+### read in data for this
+
+```{r}
+finaldata<-fread("outputs/full-data/finaldata.csv", header=T, sep=",")
+finaldata$dayofweek <- as.factor(finaldata$dayofweek)
+finaldata$site <- as.factor(finaldata$site)
+str(finaldata)
+
+#scaling parameters
+#hrfromsunrise - divide by 13.8095
+hrfromsunrisescale <- 13.8095
+#julian - divide by 158.1123
+julianscale <- 158.1123
+#logKelvindist - divide by 5.046928
+logKelvindistscale <- 5.046928
+#Clydedistkm - divide by 8.172523
+Clydedistkmscale <- 8.172523
+#prop_urban - divide by 0.6215798
+prop_urbanscale <- 0.6215798
+#dist_majorroad - divide by 409.4769
+dist_majorroadscale <- 409.4769
+#streetlight_density - divide by 23.69028
+streetlight_densityscale <- 23.69028
+#sitetemp - divide by 0.4687951
+sitetemp_scale <- 0.4687951
+
+#read in point data from GIS to use for spatial predictions
+pointdata<-fread("data/environmental_variables/buffer_point_data.csv", header=T, sep=",")
+#format variables correctly - rescaling etc
+pointdata$logKelvindist <- log(pointdata$kelvindist)
+pointdata$Clydedistkm <- pointdata$clydedist / 1000
+pointdata$logKelvindistr <- pointdata$logKelvindist / logKelvindistscale
+pointdata$Clydedistkmr <- pointdata$Clydedistkm / Clydedistkmscale
+pointdata$prop_urbanr <- pointdata$urbanprop / prop_urbanscale
+pointdata$dist_majorroadr <- pointdata$roaddist / dist_majorroadscale
+pointdata$streetlight_densityr <- pointdata$light_dens / streetlight_densityscale
+
+#make base data frame for predictions
+basedf <- subset(pointdata, select = c(logKelvindistr, Clydedistkmr, prop_urbanr, dist_majorroadr, streetlight_densityr, X, Y, site))
+
+#add temp resid
+tempresid <- read.csv("kelvin_corridor_acoustic/outputs/full-data/tempresid.csv", header=TRUE, sep=",")
+tempresid$site <- as.factor(tempresid$site)
+tempresid <- subset(tempresid, select = c(site, sitetemp))
+
+basedf <- merge(basedf, tempresid, by = "site")
+basedf$sitetempr <- basedf$sitetemp / sitetemp_scale
+
+## read in Kelvin shapefile
+kelvin <- st_read("data/environmental_variables/shapefiles/Kelvin.shp")
+
+#clyde
+clyde <- st_read("data/environmental_variables/shapefiles/Clyde.shp")
+
+#major roads shapefile
+majorroad <- st_read("data/environmental_variables/shapefiles/major_roads.shp")
+
+#streetlights
+streetlight <- st_read("data/environmental_variables/shapefiles/streetlightshp.shp")
+
+
+```
+
+
+```{r}
+basedf$prop_urban <- basedf$prop_urbanr*prop_urbanscale
+basedf$streetlight_density <- basedf$streetlight_densityr*streetlight_densityscale
+basedf$dist_majorroad <- basedf$dist_majorroadr*dist_majorroadscale
+
+
+#plot basic features
+map1 <-    ggplot() +
+  geom_point(data = basedf, aes(x = X, y = Y),color="lightblue") +
+  geom_sf(data=kelvin)+
+   geom_sf(data=clyde, linewidth=1)+
+   geom_sf(data=majorroad, color="red")+
+   geom_sf(data=streetlight,size=0.005,color="yellow", alpha=0.1)+
+   coord_sf(xlim = c(254530, 259582),  ylim = c(665720, 672872))+
+   theme_bw()+
+      scale_color_continuous(aes(name="Proportion of Urban Land"))+
+      xlab("Longitude")+
+      ylab("Latitude")+
+  theme(axis.text.x = element_text(angle = 45, hjust=1, size = 6))+
+  theme(axis.text.y = element_text(size = 6))+
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+
+
+#plot proportion of urban land
+map2 <-    ggplot() +
+  geom_point(data = basedf, aes(x = X, y = Y, color=prop_urban)) +
+  geom_sf(data=kelvin)+
+   geom_sf(data=clyde, linewidth=1)+
+   coord_sf(xlim = c(254530, 259582),  ylim = c(665720, 672872))+
+   theme_bw()+
+      scale_color_continuous(aes(name="Proportion of\nUrban Land"))+
+      xlab("Longitude")+
+      ylab("Latitude")+
+  theme(legend.position = c(0.81, 0.53))+
+  theme(legend.key.size = unit(0.2, 'cm'))+
+  theme(legend.title = element_text(size=6.5, lineheight = 0.8, margin = margin(b=2)))+
+  theme(legend.text = element_text(size=6.5))+ theme(legend.background=element_blank())+
+  theme(axis.text.x = element_text(angle = 45, hjust=1, size = 6))+
+  theme(axis.text.y = element_text(size = 6))+
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+
+
+
+
+#streetlight density
+map3 <-    ggplot() +
+  geom_point(data = basedf, aes(x = X, y = Y, color=streetlight_density)) +
+  geom_sf(data=kelvin)+
+   geom_sf(data=clyde, linewidth=1)+
+   coord_sf(xlim = c(254530, 259582),  ylim = c(665720, 672872))+
+   theme_bw()+
+      scale_color_continuous(aes(name="Streetlight\nDensity"),low="yellow", high="red")+
+      xlab("Longitude")+
+      ylab("Latitude")+
+  theme(legend.position = c(0.79, 0.52))+
+  theme(legend.key.size = unit(0.2, 'cm'))+
+  theme(legend.title = element_text(size=7, lineheight = 0.8, margin = margin(b=1.5)))+
+  theme(legend.text = element_text(size=6.5))+ theme(legend.background=element_blank())+
+  theme(axis.text.x = element_text(angle = 45, hjust=1, size = 6))+
+  theme(axis.text.y = element_text(size = 6))+
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+map3
+
+
+
+#distance from major road
+map4 <-    ggplot() +
+  geom_point(data = basedf, aes(x = X, y = Y, color=dist_majorroad)) +
+  geom_sf(data=kelvin)+
+   geom_sf(data=clyde, linewidth=1)+
+   coord_sf(xlim = c(254530, 259582),  ylim = c(665720, 672872))+
+   theme_bw()+
+      scale_color_continuous(aes(name="Distance\nfrom Major\nRoad (m)"),low="white",high="black")+
+      xlab("Longitude")+
+      ylab("Latitude")+
+  theme(legend.position = c(0.81, 0.5))+
+  theme(legend.key.size = unit(0.2, 'cm'))+
+  theme(legend.title = element_text(size=7, lineheight = 0.8, margin = margin(b=0.2)))+
+  theme(legend.text = element_text(size=6.5))+ theme(legend.background=element_blank())+
+  theme(axis.text.x = element_text(angle = 45, hjust=1, size = 6))+
+  theme(axis.text.y = element_text(size = 6))+
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())
+
+
+
+
+
+
+plot4 <- ggpubr::ggarrange(map1,map2,map3,map4, nrow = 2, ncol = 2, labels = c("A","B","C","D"))
+
+plot4
+ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/map_environmental_variables.png",
+       plot = plot4,
+       device = "png",
+       width = 12,
+       height = 12,
+       units = "cm",
+       dpi = 300,
+       bg = "white")
+
+```
+
+

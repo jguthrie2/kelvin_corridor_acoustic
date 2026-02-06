@@ -1,0 +1,395 @@
+---
+title: "05_NDSI_analysis"
+output: html_document
+date: "2026-02-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(glmmTMB)
+library(performance)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(data.table)
+library(lme4)
+library(lmtest)
+library(DHARMa)
+library(lattice)#necessary for qq plots for mixed models
+library(piecewiseSEM)#r squared for mixed models
+library(mgcv)
+library(forecast)
+library(lmerTest)
+library(sp)
+library(suntools)
+library(car)
+library(ggpubr)
+```
+
+
+
+## read in data with simulated temperature and humidity values
+
+```{r}
+allindices2<-fread("outputs/full-data/allindices2.csv", header=T, sep=",")
+str(allindices2)
+
+##add in new clyde distance (river distance)
+sitedata<- fread("data/all_site_data.csv", header=T, sep="," )
+sitedata$site<-as.factor(sitedata$site)
+sitedataclyde<-subset(sitedata,select=c(site,newClydedist0,newClydedist2))
+allindices2<-merge(allindices2,sitedataclyde,by="site",all=T)
+allindices2$Clydedistkm<-allindices2$newClydedist0/1000
+allindices2$Clydedist2km<-allindices2$newClydedist2/1000
+
+##rescale variables
+allindices2<-as.data.frame(allindices2)
+allindices2  <- transform(allindices2,logKelvindistr=scale(logKelvindist,center=FALSE),Clydedistkmr=scale(Clydedistkm,center=FALSE),julianr=scale(julian,center=FALSE),timehrr=scale(timehr,center=FALSE),Elevationr=scale(Elevation,center=FALSE),Tempr=scale(Temp,center=FALSE),Rel.Humidityr=scale(Rel.Humidity,center=FALSE),dist_streetlightr=scale(dist_streetlight,center=FALSE),prop_woodlandr=scale(prop_woodland,center=FALSE),prop_wetlandr=scale(prop_wetland,center=FALSE),prop_urbanr=scale(prop_urban,center=FALSE),prop_grasslandr=scale(prop_grassland,center=FALSE),prop_arabler=scale(prop_arable,center=FALSE),dist_allotmentr=scale(dist_allotment,center=FALSE),dist_cemeteryr=scale(dist_cemetery,center=FALSE),dist_parksr=scale(dist_parks,center=FALSE),dist_motorwayr=scale(dist_motorway,center=FALSE),dist_majorroadr=scale(dist_majorroad,center=FALSE),dist_minorroadr=scale(dist_minorroad,center=FALSE),dist_canalr=scale(dist_canal,center=FALSE),dist_laker=scale(dist_lake,center=FALSE),dist_riverr=scale(dist_river,center=FALSE),streetlight_densityr=scale(streetlight_density,center=FALSE))
+
+allindices3<-allindices2[complete.cases(allindices2), ]
+
+#write.csv(allindices3,"C:/Users/jemma/Documents/GALLANT project/Acoustic-analysis/outputs/full-data/data_temp_dist.csv")
+
+
+
+
+
+## create variable for time from sunrise
+
+
+#try making data frame with full list of dates, 1 coordinate for all sites, and add to full data frame - subset those which have times before sunrise and adjust the date to correspond with the previous day so they have the previous day's sunrise time
+
+#data frame of list of all dates
+datetimes<-allindices3$datetime
+datetimes<-dmy_hm(datetimes)
+min(datetimes)
+max(datetimes)
+dates<-seq.Date(from = as.Date("2023-03-10 UTC"), to = as.Date(max(datetimes)), by = 'days') 
+str(dates)
+datesp<-as.POSIXct(dates)
+
+#spatial points object of average lat long
+mean(allindices3$lon)
+mean(allindices3$lat)
+coord <- matrix(c(mean(allindices3$lon), 
+mean(allindices3$lat)), nrow=1)
+  Coord <- sp::SpatialPoints(coord, proj4string=sp::CRS("+proj=longlat +datum=WGS84"))
+  
+  #calculate sunrise time for each day
+st3<-sunriset(
+coord,
+datesp,
+direction = "sunrise",
+POSIXct.out=TRUE
+)
+
+#separate first 16 rows (before daylight savings) and rows 17-173 (british summer time)
+st31<-st3[1:16,]
+st32<-st3[17:173,]
+st32$time<-st32$time-3600
+
+#entire data set in GMT
+st4<-rbind(st31,st32)
+st4$date<-as.Date(st4$time)
+st4$sunrise<-st4$time
+st4<-subset(st4,select=c(sunrise,date))
+
+allindices3$date<-as.Date(allindices3$date,"%d/%m/%Y")
+
+#166025
+allindices4<-merge(allindices3,st4,by="date")
+allindices4$datetime<-dmy_hm(allindices4$datetime)
+allindices4$diff<-allindices4$datetime-allindices4$sunrise
+allindices4$diffn<-as.numeric(allindices4$diff)
+
+prevday<-filter(allindices4,diffn<=0)
+sameday<-filter(allindices4,diffn>0)
+
+prevday$date<-prevday$date-1
+prevday<-subset(prevday,select=-c(sunrise))
+prevday<-merge(prevday,st4,by="date")
+
+allindices5<-rbind(prevday,sameday)
+allindices5$timefromsunrise<-allindices5$datetime-allindices5$sunrise
+allindices5$minfromsunrise<-as.numeric(allindices5$timefromsunrise)/60
+allindices5$hrfromsunrise<-as.numeric(allindices5$minfromsunrise)/60
+hist(allindices5$hrfromsunrise)
+
+p <- 24
+indicesdf5rs  <- transform(allindices5,minfromsunriser=scale(minfromsunrise,center=FALSE),hrfromsunriser=scale(hrfromsunrise,center=FALSE))
+max(indicesdf5rs$minfromsunrise)
+
+#days getting longer by ~10 minutes each day during study period
+#try periodicity of both 24 hours and 24.167 hours (1450 minutes)
+
+#scaling of minfromsunrise divides by 828.5704
+#scaling of hrfromsunrise divides by 13.8095
+#scaling of timehr divides by 13.66089
+
+#24 hours, rescaled by timehr
+prs<-24/13.66089
+
+#24 hours, rescaled by hrfromsunrise 
+pshrs<-24/13.8095
+#24.167 hours, rescaled by hrfromsunrise
+pshrso<-24.167/13.8095
+
+
+indicesdf5rs<- indicesdf5rs %>% 
+  group_by(site,date) %>% 
+  arrange(hrfromsunriser, .by_group = TRUE) %>% 
+  mutate(time_ordinal = row_number()) 
+
+
+indicesdf5rs$time_ordinalfac<-as.factor(indicesdf5rs$time_ordinal)
+
+
+
+## model temp/humidity ~ time + day + (1|site) to get random effect term for each site to use as explanatory variable in big models
+
+##temperature
+tempmod1 <- lmer(Temp ~ hrfromsunrise + julian + (1|site), data = indicesdf5rs)
+summary(tempmod1)
+hist(resid(tempmod1))
+plot(tempmod1)
+ranef(tempmod1)
+sitetemp <- (ranef(tempmod1))$site
+sitetemp$sitetemp <- sitetemp$`(Intercept)`
+sitetemp$site <- rownames(sitetemp)
+sitetempdf <- subset(sitetemp, select = c("site", "sitetemp"))
+sitetempdf$site <- as.factor(sitetempdf$site)
+
+hummod1 <- lmer(Rel.Humidity ~ hrfromsunrise + julian + (1|site), data = indicesdf5rs)
+summary(hummod1)
+hist(resid(hummod1))
+plot(hummod1)
+ranef(hummod1)
+sitehum <- (ranef(hummod1))$site
+sitehum$sitehum <- sitehum$`(Intercept)`
+sitehum$site <- rownames(sitehum)
+sitehumdf <- subset(sitehum, select = c("site", "sitehum"))
+sitehumdf$site <- as.factor(sitehumdf$site)
+
+siteenv <- merge(sitetempdf, sitehumdf, by = "site")
+
+
+
+indicesdf5rs <- merge(indicesdf5rs, siteenv, by = "site", all = TRUE)
+
+
+indicesdf5rs  <- transform(indicesdf5rs,sitetempr=scale(sitetemp,center=FALSE),sitehumr=scale(sitehum,center=FALSE))
+
+
+
+days <- wday(indicesdf5rs$datetime)
+#dates are one day forward - day of week 3 is actually day of week 2
+days2 <- days-1
+
+
+days2[days2 == '0'] <- '7'
+days2 <- as.numeric(days2)
+daysdf <- as.data.frame(days2)
+
+daysdf$dayofweek <- case_when(
+  days2 < 6 ~ "weekday",
+  days2 == 6 ~ "weekend"
+)
+
+dow <- subset(daysdf, select = c("dayofweek"))
+
+indicesdf5rs$dayofweek <- dow$dayofweek
+indicesdf5rs$dayofweek <- as.factor(indicesdf5rs$dayofweek)
+
+indicesdf5rs$sitedate <- paste(indicesdf5rs$site, indicesdf5rs$date, sep = "-")
+indicesdf5rs$sitedate <- as.factor(indicesdf5rs$sitedate)
+
+#kelvin variables
+indicesdf5rs$Kelvindist <- exp(indicesdf5rs$logKelvindist)
+indicesdf5rs$Kelvindistr <- scale(indicesdf5rs$Kelvindist,center=FALSE)
+```
+
+
+
+
+
+
+## global model
+
+
+## check for collinearity (and check other model assumptions) in initial global model
+
+```{r}
+NDSI1u<-glmmTMB(NDSI~Kelvindistr+prop_urbanr+Clydedistkmr+dist_majorroadr+streetlight_densityr+julianr+Kelvindistr*prop_urbanr+(1|site)+ar1(time_ordinalfac + 0 | date), family=beta_family(link="logit"), data=indicesdf5rs,REML=FALSE)
+
+
+vif(NDSI1u)
+check_collinearity(NDSI1u)
+
+summary(NDSI1u)
+
+hist(resid(NDSI1u))
+
+NDSI1uresid <- simulateResiduals(fittedModel = NDSI1u,re.form=NA)
+
+plotQQunif(NDSI1uresid)
+
+plotResiduals(NDSI1resid)
+
+```
+
+
+
+### model selection - remove interaction
+
+```{r}
+NDSI2u<-glmmTMB(NDSI~Kelvindistr+prop_urbanr+Clydedistkmr+dist_majorroadr+streetlight_densityr+julianr+(1|site)+ar1(time_ordinalfac + 0 | date), family=beta_family(link="logit"), data=indicesdf5rs,REML=FALSE)
+
+lrtest(NDSI1u,NDSI2u)
+AIC(NDSI1u,NDSI2u)
+
+summary(NDSI2u)
+
+
+###examine residuals again
+summary(NDSI2u)
+hist(resid(NDSI2u))
+NDSI2uresid <- simulateResiduals(fittedModel = NDSI2u,re.form=NA)
+plotQQunif(NDSI2uresid)
+plotResiduals(NDSI2uresid)
+
+###number of data points in model = 166025
+###model degrees of freedom for model = 1 + 1 + 1 + 1 + 1 + 1 + 1
+### residual degrees of freedom for model  = 166025 - 7 = 166018
+
+```
+
+
+
+
+### plots
+
+```{r}
+NDSIdf1 = data.frame(streetlight_densityr =rep(seq(min(indicesdf5rs$streetlight_densityr ), max(indicesdf5rs$streetlight_densityr),by=0.5),length=999),site="E1",julianr= rep(mean(indicesdf5rs$julianr ),length=999), Kelvindistr= rep(mean(indicesdf5rs$Kelvindistr ),length=999), prop_urbanr= rep(mean(indicesdf5rs$prop_urbanr ),length=999),Clydedistkmr= rep(mean(indicesdf5rs$Clydedistkmr ),length=999),dist_majorroadr= rep(mean(indicesdf5rs$dist_majorroadr ),length=999), time_ordinalfac="60",date="2023-04-03")
+NDSIpreds1<-predict(NDSI2u,newdata=NDSIdf1, se.fit=TRUE,type="response")
+NDSIpreds1<-as.data.frame(NDSIpreds1)
+NDSIdf1$preds<-NDSIpreds1$fit
+#add variables for confidence intervals - 2 standard errors
+NDSIdf1$minse<-NDSIpreds1$fit-(NDSIpreds1$se.fit)
+NDSIdf1$maxse<-NDSIpreds1$fit+(NDSIpreds1$se.fit)
+NDSIdf1$streetlight_density<-NDSIdf1$streetlight_densityr*23.69028
+
+
+streetlightNDSI<-ggplot(NDSIdf1,aes(x=streetlight_density,y=preds))+
+  geom_line()+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  theme_classic()+
+  xlab("Streetlight Density")+
+  ylab("NDSI")+
+  scale_fill_discrete(guide = 'none')+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))
+
+streetlightNDSI
+
+
+```
+
+
+
+```{r}
+NDSIdf2 = data.frame(julianr =rep(seq(min(indicesdf5rs$julianr ), max(indicesdf5rs$julianr),by=0.05),length=999),site="E1",streetlight_densityr= rep(mean(indicesdf5rs$streetlight_densityr ),length=999), Kelvindistr= rep(mean(indicesdf5rs$Kelvindistr ),length=999), prop_urbanr= rep(mean(indicesdf5rs$prop_urbanr ),length=999),Clydedistkmr= rep(mean(indicesdf5rs$Clydedistkmr ),length=999),dist_majorroadr= rep(mean(indicesdf5rs$dist_majorroadr ),length=999), time_ordinalfac="60",date="2023-04-03")
+NDSIpreds2<-predict(NDSI2u,newdata=NDSIdf2, se.fit=TRUE,type="response")
+NDSIpreds2<-as.data.frame(NDSIpreds2)
+NDSIdf2$preds<-NDSIpreds2$fit
+#add variables for confidence intervals - 2 standard errors
+NDSIdf2$minse<-NDSIpreds2$fit-(NDSIpreds2$se.fit)
+NDSIdf2$maxse<-NDSIpreds2$fit+(NDSIpreds2$se.fit)
+NDSIdf2$julian<-NDSIdf2$julianr*158.1123
+
+julianNDSI<-ggplot(NDSIdf2,aes(x=julian,y=preds))+
+  geom_line()+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  theme_classic()+
+  xlab("Day of Year")+
+  ylab("NDSI")+
+  scale_fill_discrete(guide = 'none')+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))+
+  scale_x_continuous(breaks=c(100,150,200),labels=c("10/04","30/05","19/07"))
+
+julianNDSI
+```
+
+
+
+
+```{r}
+NDSIdf3 = data.frame(Kelvindistr =rep(seq(min(indicesdf5rs$Kelvindistr ), max(indicesdf5rs$Kelvindistr),by=0.05),length=999),site="E1",streetlight_densityr= rep(mean(indicesdf5rs$streetlight_densityr ),length=999), julianr= rep(mean(indicesdf5rs$julianr ),length=999), prop_urbanr= rep(mean(indicesdf5rs$prop_urbanr ),length=999),Clydedistkmr= rep(mean(indicesdf5rs$Clydedistkmr ),length=999),dist_majorroadr= rep(mean(indicesdf5rs$dist_majorroadr ),length=999), time_ordinalfac="60",date="2023-04-03")
+NDSIpreds3<-predict(NDSI2u,newdata=NDSIdf3, se.fit=TRUE,type="response")
+NDSIpreds3<-as.data.frame(NDSIpreds3)
+NDSIdf3$preds<-NDSIpreds3$fit
+#add variables for confidence intervals - 2 standard errors
+NDSIdf3$minse<-NDSIpreds3$fit-(NDSIpreds3$se.fit)
+NDSIdf3$maxse<-NDSIpreds3$fit+(NDSIpreds3$se.fit)
+NDSIdf3$Kelvindist<-NDSIdf3$Kelvindistr*288.4527
+
+kelvinNDSI<-ggplot(NDSIdf3,aes(x=Kelvindist,y=preds))+
+  geom_line()+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  theme_classic()+
+  xlab("Distance from Riparian Corridor (m)")+
+  ylab("NDSI")+
+  scale_fill_discrete(guide = 'none')+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))
+
+kelvinNDSI
+```
+
+
+
+```{r}
+NDSIdf4 = data.frame(prop_urbanr =rep(seq(min(indicesdf5rs$prop_urbanr ), max(indicesdf5rs$prop_urbanr),by=0.05),length=999),site="E1",streetlight_densityr= rep(mean(indicesdf5rs$streetlight_densityr ),length=999), julianr= rep(mean(indicesdf5rs$julianr ),length=999), Kelvindistr= rep(mean(indicesdf5rs$Kelvindistr ),length=999),Clydedistkmr= rep(mean(indicesdf5rs$Clydedistkmr ),length=999),dist_majorroadr= rep(mean(indicesdf5rs$dist_majorroadr ),length=999), time_ordinalfac="60",date="2023-04-03")
+NDSIpreds4<-predict(NDSI2u,newdata=NDSIdf4, se.fit=TRUE,type="response")
+NDSIpreds4<-as.data.frame(NDSIpreds4)
+NDSIdf4$preds<-NDSIpreds4$fit
+#add variables for confidence intervals - 2 standard errors
+NDSIdf4$minse<-NDSIpreds4$fit-(NDSIpreds4$se.fit)
+NDSIdf4$maxse<-NDSIpreds4$fit+(NDSIpreds4$se.fit)
+NDSIdf4$prop_urban<-NDSIdf4$prop_urbanr*0.6215798
+
+urbanNDSI<-ggplot(NDSIdf4,aes(x=prop_urban,y=preds))+
+  geom_line()+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  theme_classic()+
+  xlab("Proportion of Urban Land")+
+  ylab("NDSI")+
+  scale_fill_discrete(guide = 'none')+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))
+
+urbanNDSI
+```
+
+
+
+
+
+
+```{r}
+top_row = ggarrange(streetlightNDSI, julianNDSI, ncol = 2, labels = c("A", "B"))
+bottom_row = ggarrange(kelvinNDSI, urbanNDSI, ncol = 2, labels = c("C", "D"))
+final_plotNDSI = ggarrange(top_row, bottom_row, ncol = 1)
+final_plotNDSI
+
+ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/NDSI/NDSI_model_output.png",
+       plot = final_plotNDSI,
+       device = "png",
+       width = 20,
+       height = 15,
+       units = "cm",
+       dpi = 300,
+       bg = "white")
+
+```
+

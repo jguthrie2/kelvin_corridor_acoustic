@@ -1,0 +1,255 @@
+********************************************************************
+
+EDINA DIGIMAP:
+
+DIGITAL DATA SUPPLY
+
+********************************************************************
+
+
+This data is distributed under licence by:
+
+    EDINA
+    University of Edinburgh
+    https://edina.ac.uk
+
+    Tel:    0131 650 3302
+    Fax:    0131 650 3308
+    Email:  digimap@ed.ac.uk
+		
+
+
+---------------------------------------------------------
+
+CONTENTS
+
+You will have received the data files listed below, each product and area has
+its own folder. Note that each data folder contains a conditions.txt file
+which states the conditions for use of the data within. These conditions can
+vary between different data products.
+
+
+
+-------------------------------------------------------------------------------
+Folder:           MasterMap Greenspace_5228130
+Extent:           240519.95805409408, 646509.5391409958 - 280367.5143473775, 683063.0625272945
+Date Ordered:     31 October 2023 at 10:51:46
+Product:          OS MasterMap Greenspace
+Version:          April 2023
+Format:           SHAPE
+Theme:            N/A
+Area:             53 tiles
+Tiles:
+ 
+Tile Name:        ns45sw
+Extent:           240000.0, 650000.0 - 245000.0, 655000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns45nw
+Extent:           240000.0, 655000.0 - 245000.0, 660000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns46sw
+Extent:           240000.0, 660000.0 - 245000.0, 665000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns46nw
+Extent:           240000.0, 665000.0 - 245000.0, 670000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns47sw
+Extent:           240000.0, 670000.0 - 245000.0, 675000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns47nw
+Extent:           240000.0, 675000.0 - 245000.0, 680000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns45ne
+Extent:           245000.0, 655000.0 - 250000.0, 660000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns46se
+Extent:           245000.0, 660000.0 - 250000.0, 665000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns46ne
+Extent:           245000.0, 665000.0 - 250000.0, 670000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns47se
+Extent:           245000.0, 670000.0 - 250000.0, 675000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns55sw
+Extent:           250000.0, 650000.0 - 255000.0, 655000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns55nw
+Extent:           250000.0, 655000.0 - 255000.0, 660000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns56sw
+Extent:           250000.0, 660000.0 - 255000.0, 665000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns56nw
+Extent:           250000.0, 665000.0 - 255000.0, 670000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns57sw
+Extent:           250000.0, 670000.0 - 255000.0, 675000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns57nw
+Extent:           250000.0, 675000.0 - 255000.0, 680000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns58sw
+Extent:           250000.0, 680000.0 - 255000.0, 685000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns55se
+Extent:           255000.0, 650000.0 - 260000.0, 655000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns55ne
+Extent:           255000.0, 655000.0 - 260000.0, 660000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns56se
+Extent:           255000.0, 660000.0 - 260000.0, 665000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns56ne
+Extent:           255000.0, 665000.0 - 260000.0, 670000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns57se
+Extent:           255000.0, 670000.0 - 260000.0, 675000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns57ne
+Extent:           255000.0, 675000.0 - 260000.0, 680000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns58se
+Extent:           255000.0, 680000.0 - 260000.0, 685000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns64nw
+Extent:           260000.0, 645000.0 - 265000.0, 650000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns65sw
+Extent:           260000.0, 650000.0 - 265000.0, 655000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns65nw
+Extent:           260000.0, 655000.0 - 265000.0, 660000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns66sw
+Extent:           260000.0, 660000.0 - 265000.0, 665000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns66nw
+Extent:           260000.0, 665000.0 - 265000.0, 670000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns67sw
+Extent:           260000.0, 670000.0 - 265000.0, 675000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns67nw
+Extent:           260000.0, 675000.0 - 265000.0, 680000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns68sw
+Extent:           260000.0, 680000.0 - 265000.0, 685000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns64ne
+Extent:           265000.0, 645000.0 - 270000.0, 650000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns65se
+Extent:           265000.0, 650000.0 - 270000.0, 655000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns65ne
+Extent:           265000.0, 655000.0 - 270000.0, 660000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns66se
+Extent:           265000.0, 660000.0 - 270000.0, 665000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns66ne
+Extent:           265000.0, 665000.0 - 270000.0, 670000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns67se
+Extent:           265000.0, 670000.0 - 270000.0, 675000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns67ne
+Extent:           265000.0, 675000.0 - 270000.0, 680000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns75sw
+Extent:           270000.0, 650000.0 - 275000.0, 655000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns75nw
+Extent:           270000.0, 655000.0 - 275000.0, 660000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns76sw
+Extent:           270000.0, 660000.0 - 275000.0, 665000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns76nw
+Extent:           270000.0, 665000.0 - 275000.0, 670000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns77sw
+Extent:           270000.0, 670000.0 - 275000.0, 675000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns77nw
+Extent:           270000.0, 675000.0 - 275000.0, 680000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns75se
+Extent:           275000.0, 650000.0 - 280000.0, 655000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns75ne
+Extent:           275000.0, 655000.0 - 280000.0, 660000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns76se
+Extent:           275000.0, 660000.0 - 280000.0, 665000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns76ne
+Extent:           275000.0, 665000.0 - 280000.0, 670000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns77se
+Extent:           275000.0, 670000.0 - 280000.0, 675000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns77ne
+Extent:           275000.0, 675000.0 - 280000.0, 680000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns86sw
+Extent:           280000.0, 660000.0 - 285000.0, 665000.0
+Last Amended:     17 April 2023
+  
+Tile Name:        ns86nw
+Extent:           280000.0, 665000.0 - 285000.0, 670000.0
+Last Amended:     17 April 2023
+     

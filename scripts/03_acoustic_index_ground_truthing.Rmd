@@ -1,0 +1,234 @@
+---
+title: "03_acoustic_index_ground_truthing"
+output: html_document
+date: "2026-02-05"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tuneR)
+library(seewave)
+library(soundecology)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(glmmTMB)
+library(pscl)
+library(lmtest)
+```
+
+
+#calculate indices for each validation subsample file
+
+```{r}
+#function to calculate indices for each file
+testindicesfunc<-function(file,filepath) { 
+
+ # file names to read in - pathway followed by name of individual file
+  name <- paste(filepath, file,  sep="/")
+  #read in the wav files
+  wav <- readWave(name)
+
+  #Bioacoustic Index
+ BIO<- bioacoustic_index(wav, min_freq = 2000, max_freq = 10000)$left_area
+  
+  #Acoustic Complexity Index
+ ACI<- ACI(wav, flim=c(2,10))
+  
+  #Normalised Difference Soundscape Index
+ NDSI<- NDSI(soundscapespec(wav, plot=FALSE))
+  
+#Create Data Frame Including File Name and Index Values
+  valuedf<-data.frame(file,BIO,ACI,NDSI,name)
+  
+
+}#end of indicesfunc
+
+#list of files with exact site and date
+testfiles<-list.files("kelvin_corridor_acoustic/validation_subset")
+
+testpathway<-"kelvin_corridor_acoustic/validation_subset"
+
+#run the above function for all files in the folders for 0,1,2 for a given letter and bind data frames together
+#make data frame of indices for all files in the folder
+ allvaluesdf <- do.call(rbind.data.frame,
+             lapply(testfiles,testindicesfunc,testpathway))
+
+
+#end of second for loop - function has run for 0,1,2 for a given site
+
+allvaluesdf
+  
+
+#convert NDSI to values between 0 and 1 rather than -1 and 1
+allvaluesdf$NDSIoriginal<-allvaluesdf$NDSI
+allvaluesdf$NDSI<-(allvaluesdf$NDSI+1)/2
+
+#rescale BIO
+allvaluesdf$BIOrescale <- (allvaluesdf$BIO - min(allvaluesdf$BIO)) / (max(allvaluesdf$BIO) - min(allvaluesdf$BIO))
+
+#rescale ACI
+allvaluesdf$ACIrescale <- (allvaluesdf$ACI - min(allvaluesdf$ACI)) / (max(allvaluesdf$ACI) - min(allvaluesdf$ACI))
+
+#make mean of all scaled acoustic indices
+allvaluesdf$meanindex<-(allvaluesdf$ACIrescale+allvaluesdf$BIOrescale+allvaluesdf$NDSI)/3
+
+#write csv file with indices
+write.csv(allvaluesdf,"kelvin_corridor_acoustic/outputs/ground_truthing/validation_indices.csv")
+
+
+```
+
+
+
+
+# verification analysis
+
+
+## read in manual classifications of each recording
+
+```{r}
+testdata<-read.csv("data/validation_summary.csv", header=T, sep="," )
+testdata$mean2<-(testdata$NDSI+testdata$BIOrescale)/2
+```
+
+
+try correlation tests of each acoustic index with biophony_diversity, biophony_duration, biophony_intensity_number, anthrophony_cat_num, anthrophony_duration, geophony_cat_num, geophony_duration
+
+
+## test normality of variables
+
+```{r}
+#acoustic indices
+hist(testdata$NDSI,breaks = seq(min(testdata$NDSI), max(testdata$NDSI),length.out=20))
+shapiro.test(testdata$NDSI)#not normally distributed
+
+hist(testdata$ACIrescale,breaks = seq(min(testdata$ACIrescale), max(testdata$ACIrescale),length.out=20))
+shapiro.test(testdata$ACIrescale)#not normally distributed
+
+hist(testdata$BIOrescale,breaks = seq(min(testdata$BIOrescale), max(testdata$BIOrescale),length.out=20))
+shapiro.test(testdata$BIOrescale)#not normally distributed
+
+hist(testdata$meanindex,breaks = seq(min(testdata$meanindex), max(testdata$meanindex),length.out=20))
+shapiro.test(testdata$meanindex)#not normally distributed
+```
+
+
+## kendall's correlation tests
+
+
+## use p.adjust function for each p value (Bonferroni correction for n=18)
+
+
+### NDSI
+
+```{r}
+cor.test(testdata$NDSI,testdata$biophony_diversity,method="kendall")#insignificant
+#p.adjust(p, n=18)
+
+cor.test(testdata$NDSI,testdata$biophony_duration,method="kendall")#significant
+
+cor.test(testdata$NDSI,testdata$biophony_intensity_number,method="kendall")#significant
+
+cor.test(testdata$NDSI,testdata$anthrophony_cat_num,method="kendall")#significant
+
+cor.test(testdata$NDSI,testdata$anthrophony_duration,method="kendall")#significant
+
+cor.test(testdata$NDSI,testdata$geophony_cat_num,method="kendall")#insignificant
+
+cor.test(testdata$NDSI,testdata$geophony_duration,method="kendall")#insignificant
+
+#NDSI shows significant correlation with biophony duration & intensity and anthrophony diversity and duration
+```
+
+
+
+### ACI
+
+```{r}
+cor.test(testdata$ACIrescale,testdata$biophony_diversity,method="kendall")#insignificant
+
+cor.test(testdata$ACIrescale,testdata$biophony_duration,method="kendall")#insignificant
+
+cor.test(testdata$ACIrescale,testdata$biophony_intensity_number,method="kendall")#insignificant
+
+cor.test(testdata$ACIrescale,testdata$anthrophony_cat_num,method="kendall")#insignificant
+
+cor.test(testdata$ACIrescale,testdata$anthrophony_duration,method="kendall")#insignificant
+
+cor.test(testdata$ACIrescale,testdata$geophony_cat_num,method="kendall")#significant - positive relationship
+
+cor.test(testdata$ACIrescale,testdata$geophony_duration,method="kendall")#significant - positive relationship
+
+#ACI shows significant positive correlation with geophony diversity and duration
+
+```
+
+
+### BIO
+
+```{r}
+cor.test(testdata$BIOrescale,testdata$biophony_diversity,method="kendall")#significant
+ 
+cor.test(testdata$BIOrescale,testdata$biophony_duration,method="kendall")#significant
+
+cor.test(testdata$BIOrescale,testdata$biophony_intensity_number,method="kendall")#significant
+
+cor.test(testdata$BIOrescale,testdata$anthrophony_cat_num,method="kendall")#insignificant
+
+cor.test(testdata$BIOrescale,testdata$anthrophony_duration,method="kendall")#insignificant
+
+cor.test(testdata$BIOrescale,testdata$geophony_cat_num,method="kendall")#insignificant 
+
+cor.test(testdata$BIOrescale,testdata$geophony_duration,method="kendall")#insignificant
+
+#BIO shows significant relationship with biophony diversity, duration and intensity
+```
+
+
+### mean index
+
+```{r}
+cor.test(testdata$meanindex,testdata$biophony_diversity,method="kendall")#significant
+
+cor.test(testdata$meanindex,testdata$biophony_duration,method="kendall")#significant
+
+cor.test(testdata$meanindex,testdata$biophony_intensity_number,method="kendall")#significant
+
+cor.test(testdata$meanindex,testdata$anthrophony_cat_num,method="kendall")#nearly significant
+
+cor.test(testdata$meanindex,testdata$anthrophony_duration,method="kendall")#significant
+
+cor.test(testdata$meanindex,testdata$geophony_cat_num,method="kendall")#insignificant 
+
+cor.test(testdata$meanindex,testdata$geophony_duration,method="kendall")#insignificant
+
+
+#mean acoustic index shows significant correlation with biophony diversity, duration and intensity, and anthrophony duration, and marginally significant correlation with anthrophony diversity
+```
+
+
+### mean of NDSI and BIO
+
+```{r}
+cor.test(testdata$mean2,testdata$biophony_diversity,method="kendall")#significant
+
+cor.test(testdata$mean2,testdata$biophony_duration,method="kendall")#significant
+
+cor.test(testdata$mean2,testdata$biophony_intensity_number,method="kendall")#significant
+
+cor.test(testdata$mean2,testdata$anthrophony_cat_num,method="kendall")#insignificant
+
+cor.test(testdata$mean2,testdata$anthrophony_duration,method="kendall")#significant
+
+cor.test(testdata$mean2,testdata$geophony_cat_num,method="kendall")#insignificant 
+
+cor.test(testdata$mean2,testdata$geophony_duration,method="kendall")#insignificant
+
+```
+
+
+
+bioacoustic index shows strongest correlation with biophony metrics
+

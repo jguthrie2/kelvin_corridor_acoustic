@@ -1,0 +1,14 @@
+The citations in this document should be used to reference the maps and data
+when they have been included in any essays, dissertations or other academic
+works. You should cite the data even if it doesn't appear as an image or map
+in your work if it has been used to generate findings or a new dataset that is
+used.
+
+There is one entry for each product and selected area; you can edit the
+citation if you only use part of the data it covers. Any citations provided
+below are a guide only and should be given in addition to any requirement to
+acknowledge sources and copyright of any data used or any local guidance
+provided:
+
+OS MasterMap Greenspace [SHAPE geospatial data], Scale 1:2500, Tiles: ns45sw,ns45nw,ns46sw,ns46nw,ns47sw,ns47nw,ns45ne,ns46se,ns46ne,ns47se,ns55sw,ns55nw,ns56sw,ns56nw,ns57sw,ns57nw,ns58sw,ns55se,ns55ne,ns56se,ns56ne,ns57se,ns57ne,ns58se,ns64nw,ns65sw,ns65nw,ns66sw,ns66nw,ns67sw,ns67nw,ns68sw,ns64ne,ns65se,ns65ne,ns66se,ns66ne,ns67se,ns67ne,ns75sw,ns75nw,ns76sw,ns76nw,ns77sw,ns77nw,ns75se,ns75ne,ns76se,ns76ne,ns77se,ns77ne,ns86sw,ns86nw, Updated: 17 April 2023, Ordnance Survey (GB), Using: EDINA Digimap Ordnance Survey Service, <https://digimap.edina.ac.uk>, Downloaded: 2023-10-31 10:51:46.904
+

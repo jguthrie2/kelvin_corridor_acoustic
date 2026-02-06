@@ -1,0 +1,155 @@
+---
+title: "01_acoustic_index_function"
+output: html_document
+date: "2026-02-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tuneR)
+library(seewave)
+library(soundecology)
+library(dplyr)
+library(lubridate)
+```
+
+
+
+## raw data (audio files) accessed through microsoft azure storage - not stored directly within repository
+
+
+# Acoustic Indices
+
+```{r}
+
+allindicesfunc<-function(weekstarting,date,sites){
+  #create big function to calculate indices for all named sites on a given date
+  
+  for(x in sites){
+    #go through site A, then site B etc
+    
+    weekstartingsite<-paste(weekstarting,x,sep="/")#make weekstarting/A, weekstarting/B etc
+    
+    #files with week starting and site
+    filepart1<-paste("Z:/AudioMoth_data",weekstartingsite,sep="/")
+    
+    #pathway with week starting and site
+    pathway1 <- paste("Z:/AudioMoth_data",weekstartingsite,sep="/")
+    
+ allvaluesdf  <- NULL;
+    for(n in 0:2){
+      #go through 0,1,2 for each site
+  
+  ##make file names to read in
+      #files with exact site
+filepart2<-paste(filepart1,n,sep="") #make A0, A1 etc
+
+#files with exact site and date
+filenames<-paste(filepart2,date,sep="/")
+#list of files with exact site and date
+files<-list.files(filenames)
+
+  
+  #make file pathway
+#location of the listed files
+#pathway with exact site
+pathway2<-paste(pathway1,n,sep="") #make A0, A1 etc
+#pathway with exact site and date
+pathways<-paste(pathway2,date,sep="/")
+  
+
+#function to calculate indices for each file
+indicesfunc<-function(file,filepath) { 
+
+ # file names to read in - pathway followed by name of individual file
+  name <- paste(filepath, file,  sep="/")
+  #read in the wav files
+  wav <- readWave(name)
+
+  #Bioacoustic Index
+ BIO<- bioacoustic_index(wav, min_freq = 2000, max_freq = 10000)$left_area
+  
+  #Acoustic Complexity Index
+ ACI<- ACI(wav, flim=c(2,10))
+  
+  #Normalised Difference Soundscape Index
+ NDSI<- NDSI(soundscapespec(wav, plot=FALSE))
+  
+#Create Data Frame Including File Name and Index Values
+  valuedf<-data.frame(file,BIO,ACI,NDSI,name)
+  
+
+}#end of indicesfunc
+
+#run the above function for all files in the folders for 0,1,2 for a given letter and bind data frames together
+#make data frame of indices for all files in the folder
+ valuesdf <- do.call(rbind.data.frame,
+             lapply(files,indicesfunc,pathways))
+ #compile outputs for locations 0,1,2 for each file pathway
+ allvaluesdf <- rbind(allvaluesdf, valuesdf)
+allvaluesdf 
+
+}#end of second for loop - function has run for 0,1,2 for a given site
+
+allvaluesdf
+  
+#make site variable in data frame by extracting site name from file name
+allvaluesdf$site<-allvaluesdf$name
+#characters 40 and 41 of file name
+ allvaluesdf$site<-substr(allvaluesdf$site,40,41)
+ 
+  #make datetime variable by extracting datetime from file name
+allvaluesdf$datetime<-allvaluesdf$file
+allvaluesdf$datetime= substr(allvaluesdf$datetime,1,nchar(allvaluesdf$datetime)-4)
+allvaluesdf$datetime<-ymd_hms(allvaluesdf$datetime)
+
+#make time variable
+allvaluesdf$time<-allvaluesdf$datetime
+allvaluesdf$time<-format(strptime(allvaluesdf$time, "%Y-%m-%d %H:%M:%S"), "%H:%M:%S")
+
+  #make output path
+#paste site name and date together to get unique name for a given day of data at a given site
+outputname1<-paste(x,date,sep="")
+#add .csv to the end of the name so the output can be written as a csv file
+outputname<-paste(outputname1,".csv",sep="")
+
+#pathway for where to put the csv files with indices in them
+outputfolder<-paste("kelvin_corridor_acoustic/outputs/acoustic-indices",weekstarting,sep="/")
+
+outputlocation<-paste(outputfolder,outputname,sep="/")
+
+
+
+
+#write csv file with indices for a given site
+write.csv(allvaluesdf,outputlocation)
+
+
+
+    }#end of first for loop
+    #at this point the above function has run for each site separately, generating separate csv files for each site
+
+}
+
+
+
+##run function for test data 
+##Week_starting_230417
+##A & B
+##20230409
+allindicesfunc("Week_starting_230417","20230409",c("A","B"))
+
+###running this function writes csv files for A0,A1,A2,B0,B1,B2 day 20230409 with all 3 acoustic indices
+
+```
+
+
+
+For the indices function to work, the sites listed for a given date must be in the same week_starting folder. If they are in different week_starting folders due to different SD card swap dates across the sites, the sites in different folders must be run separately.
+
+It is probably necessary to add an empty folder if there is no data from a particular location so the function doesn't error - eg if on a given date there is data from all sites except D2, you should probably add folders as follows: week_starting_date/D2/date
+
+
+
+
+run this function for all days of data to process

@@ -1,0 +1,89 @@
+---
+title: "02_data_collation"
+output: html_document
+date: "2026-02-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(lubridate)
+```
+
+
+
+## Combine all index files into one data frame and write as csv
+
+```{r}
+allindexfiles<-list.files("kelvin_corridor_acoustic/outputs/acoustic-indices",recursive=TRUE)
+pathway<-"kelvin_corridor_acoustic/outputs/acoustic-indices"
+allindexfiles<-paste(pathway,allindexfiles,sep="/")
+
+allindexvals<-do.call(rbind, lapply(allindexfiles, function(x) read.csv(file=x)))
+
+write.csv(allindexvals,"kelvin_corridor_acoustic/outputs/full-data/allindices.csv")
+```
+
+
+
+
+
+
+# test for temporal bias in study sites
+
+
+```{r}
+data <-fread("outputs/full-data/allindices2.csv", header=T, sep=",")
+str(data)
+data$date <- dmy(data$date)
+```
+
+
+check for bias in dates across sites
+
+```{r}
+na0 <- data %>%
+  group_by(site) %>%
+  summarise(dates = length(unique(date)), start = min(date), end = max(date))
+
+#add variables for site name and number - use this to test for bias in distance from clyde and distance from kelvin
+na0$name <- substr(na0$site, 1,1)
+na0$number <- substr(na0$site, 2,2)
+na0$name_numeric <- rep(c(1,2,3,4,5,6,7,8,9,10), each = 3)
+na0$number <- as.numeric(na0$number)
+
+#convert start and end date to julian
+na0$start_j <- yday(na0$start)
+na0$end_j <- yday(na0$end)
+
+
+##test for bias in start date with distance from clyde
+start_clyde_lm <- lm(start_j ~ name_numeric, data = na0)
+summary(start_clyde_lm)#insignificant
+
+##test for bias in end date with distance from clyde
+end_clyde_lm <- lm(end_j ~ name_numeric, data = na0)
+summary(end_clyde_lm)#insignificant
+
+##test for bias in number of dates with distance from clyde
+dates_clyde_lm <- lm(dates ~ name_numeric, data = na0)
+summary(dates_clyde_lm)#insignificant
+
+
+##test for bias in start date with distance from kelvin
+start_kelvin_lm <- lm(start_j ~ number, data = na0)
+summary(start_kelvin_lm)#insignificant
+
+##test for bias in end date with distance from kelvin
+end_kelvin_lm <- lm(end_j ~ number, data = na0)
+summary(end_kelvin_lm)#insignificant
+
+##test for bias in number of dates with distance from kelvin
+dates_kelvin_lm <- lm(dates ~ number, data = na0)
+summary(dates_kelvin_lm)#insignificant
+
+
+##summary statistics
+summary(na0$dates)
+```
+
