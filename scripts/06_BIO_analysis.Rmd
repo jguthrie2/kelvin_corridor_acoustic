@@ -56,7 +56,7 @@ sitetemp_scale <- 0.4687951
 Kelvindistscale <- 288.4527
 
 #read in point data from GIS to use for spatial predictions
-pointdata<-fread("data/buffer_point_data.csv", header=T, sep=",")
+pointdata<-fread("data/environmental_variables/buffer_point_data.csv", header=T, sep=",")
 #format variables correctly - rescaling etc
 pointdata$logKelvindist <- log(pointdata$kelvindist)
 pointdata$Clydedistkm <- pointdata$clydedist / 1000
@@ -78,16 +78,16 @@ basedf <- merge(basedf, tempresid, by = "site")
 basedf$sitetempr <- basedf$sitetemp / sitetemp_scale
 
 ## read in Kelvin shapefile
-kelvin <- st_read("kelvin_corridor_acoustic/data/environmental_variables/shapefiles/Kelvin.shp")
+kelvin <- st_read("data/environmental_variables/shapefiles/Kelvin.shp")
 
 #clyde
-clyde <- st_read("kelvin_corridor_acoustic/data/environmental_variables/shapefiles/Clyde.shp")
+clyde <- st_read("data/environmental_variables/shapefiles/Clyde.shp")
 
 #major roads shapefile
-majorroad <- st_read("kelvin_corridor_acoustic/data/environmental_variables/shapefiles/major_roads.shp")
+majorroad <- st_read("data/environmental_variables/shapefiles/major_roads.shp")
 
 #streetlights
-streetlight <- st_read("kelvin_corridor_acoustic/data/environmental_variables/shapefiles/streetlightshp.shp")
+streetlight <- st_read("data/environmental_variables/shapefiles/streetlightshp.shp")
 
 #kelvin variables
 finaldata$Kelvindist <- exp(finaldata$logKelvindist)
@@ -148,10 +148,10 @@ bioknsdf2$Kelvindist<-(bioknsdf2$Kelvindist2*171.9783)+231.5774
 
 
 kelvinp1<-ggplot(bioknsdf2,aes(x=Kelvindist,y=preds))+
-  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.25) +
-  geom_line(linewidth = 1.25)+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.25, fill = "#2a788e") +
+  geom_line(linewidth = 1.25, color = "#2a788e")+
   theme_classic()+
-  xlab("Distance from Riparian Corridor (m)")+
+  xlab("Distance from River (m)")+
   ylab("BIO")+
   theme(legend.title = element_text(size=13))+
   theme(legend.text = element_text(size=13))+
@@ -161,15 +161,59 @@ kelvinp1<-ggplot(bioknsdf2,aes(x=Kelvindist,y=preds))+
   theme(legend.key.size = unit(0.7, 'cm'))
 kelvinp1
 
-ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/BIO/riparian_corridor_fig.png",
-       plot = kelvinp1,
+```
+
+
+
+#### upstream distance
+
+```{r}
+##plot for distance from Clyde
+bioknsdf3 = data.frame(Clydedistkm2 =rep(seq(min(finaldata2$Clydedistkm2 ), max(finaldata2$Clydedistkm2),by=0.01),length=1998),hrfromsunrise2 =rep(mean(finaldata2$hrfromsunrise2),length=1998),Kelvindist2 =rep(mean(finaldata2$Kelvindist2),length=1998),prop_urban2 =rep(mean(finaldata2$prop_urban2),length=1998),site="E1",julian2 =rep(mean(finaldata2$julian2),length=1998),dayofweek ="weekday")
+bioknspreds3<-predict(biors1,newdata=bioknsdf3, se.fit=TRUE,type="response")
+bioknspreds3<-as.data.frame(bioknspreds3)
+bioknsdf3$preds<-bioknspreds3$fit
+#add variables for confidence intervals - 2 standard errors
+bioknsdf3$minse<-bioknspreds3$fit-2*(bioknspreds3$se.fit)
+bioknsdf3$maxse<-bioknspreds3$fit+2*(bioknspreds3$se.fit)
+clydedist2 <- scale(finaldata$Clydedistkm)
+attributes(clydedist2)
+bioknsdf3$Clydedistkm<-(bioknsdf3$Clydedistkm2*4.315721)+6.941029
+
+
+clydeplot2<-ggplot(bioknsdf3,aes(x=Clydedistkm,y=preds))+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2, fill= "#2a788e") +
+  geom_line(linewidth = 1.25, color = "#2a788e")+
+  theme_classic()+
+  xlab("Upstream Distance (km)")+
+  ylab("BIO")+
+  scale_fill_discrete(guide = 'none')+
+  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))
+clydeplot2
+
+
+```
+
+
+
+#### export plots for effects of geographical distances
+
+```{r}
+geog_plots = ggarrange(kelvinp1, clydeplot2, ncol = 2, labels = c("A", "B"))
+geog_plots
+
+ggsave(filename = "outputs/figures/BIO/BIO_geog_dist_effects_fig.png",
+       plot = geog_plots,
        device = "png",
-       width = 18,
-       height = 12,
+       width = 20,
+       height = 15,
        units = "cm",
        dpi = 300,
        bg = "white")
 ```
+
+
 
 
 #### time * urban
@@ -204,61 +248,17 @@ timeurbanp1<-ggplot(bioknsdf1,aes(x=hrfromsunrise,y=preds,group=prop_urban2))+
   theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
   theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))+
   theme(legend.key.size = unit(0.7, 'cm'))+
+  theme(legend.position = c(0.825, 0.775))+
   scale_x_continuous(limits = c(0, 24), breaks = seq(0, 24, by = 4))
 timeurbanp1
 
-
-ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/BIO/time_urban_fig.png",
-       plot = timeurbanp1,
-       device = "png",
-       width = 18,
-       height = 12,
-       units = "cm",
-       dpi = 300,
-       bg = "white")
 ```
 
 
 
-####miscellaneous plots
+####plots for effects of time
 
 ```{r}
-##plot for distance from Clyde
-bioknsdf3 = data.frame(Clydedistkm2 =rep(seq(min(finaldata2$Clydedistkm2 ), max(finaldata2$Clydedistkm2),by=0.01),length=1998),hrfromsunrise2 =rep(mean(finaldata2$hrfromsunrise2),length=1998),Kelvindist2 =rep(mean(finaldata2$Kelvindist2),length=1998),prop_urban2 =rep(mean(finaldata2$prop_urban2),length=1998),site="E1",julian2 =rep(mean(finaldata2$julian2),length=1998),dayofweek ="weekday")
-bioknspreds3<-predict(biors1,newdata=bioknsdf3, se.fit=TRUE,type="response")
-bioknspreds3<-as.data.frame(bioknspreds3)
-bioknsdf3$preds<-bioknspreds3$fit
-#add variables for confidence intervals - 2 standard errors
-bioknsdf3$minse<-bioknspreds3$fit-2*(bioknspreds3$se.fit)
-bioknsdf3$maxse<-bioknspreds3$fit+2*(bioknspreds3$se.fit)
-clydedist2 <- scale(finaldata$Clydedistkm)
-attributes(clydedist2)
-bioknsdf3$Clydedistkm<-(bioknsdf3$Clydedistkm2*4.315721)+6.941029
-
-
-clydeplot2<-ggplot(bioknsdf3,aes(x=Clydedistkm,y=preds))+
-  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
-  geom_line()+
-  theme_classic()+
-  xlab("Upstream Distance (km)")+
-  ylab("BIO")+
-  scale_fill_discrete(guide = 'none')+
-  theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
-  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))
-clydeplot2
-
-
-
-ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/BIO/BIO_upstream_dist_fig.png",
-       plot = clydeplot2,
-       device = "png",
-       width = 20,
-       height = 15,
-       units = "cm",
-       dpi = 300,
-       bg = "white")
-
-
 
 ## plot for julian day
 bioknsdf4 = data.frame(julian2 =rep(seq(min(finaldata2$julian2), max(finaldata2$julian2),by=0.01),length=1998),hrfromsunrise2 =rep(mean(finaldata2$hrfromsunrise2),length=1998),Kelvindist2 =rep(mean(finaldata2$Kelvindist2),length=1998),prop_urban2 =rep(mean(finaldata2$prop_urban2),length=1998),site="E1",Clydedistkm2 =rep(mean(finaldata2$Clydedistkm2),length=1998),dayofweek ="weekday")
@@ -274,8 +274,8 @@ bioknsdf4$julian<-(bioknsdf4$julian2*46.81458)+151.1769
 
 
 julianplot2<-ggplot(bioknsdf4,aes(x=julian,y=preds))+
-  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
-  geom_line()+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2, fill = "#2a788e") +
+  geom_line(linewidth = 1.25, color = "#2a788e")+
   theme_classic()+
   xlab("Day of Year")+
   ylab("BIO")+
@@ -297,8 +297,8 @@ bioknsdf5$maxse<-bioknspreds5$fit+2*(bioknspreds5$se.fit)
 
 
 weekdayplot2<-ggplot(bioknsdf5,aes(x=dayofweek,y=preds))+
-  geom_point(size=2.5)+
-  geom_errorbar(aes(ymin=minse, ymax=maxse), linetype=1,width=0.1) +
+  geom_point(size=3, color = "#2a788e")+
+  geom_errorbar(aes(ymin=minse, ymax=maxse), linetype=1,width=0.1, color = "#2a788e") +
   theme_classic()+
   xlab("Day of Week")+
   ylab("BIO")+
@@ -309,14 +309,14 @@ weekdayplot2<-ggplot(bioknsdf5,aes(x=dayofweek,y=preds))+
 weekdayplot2
 
 
-finalplot2 = ggarrange(julianplot2, weekdayplot2, ncol = 2, labels = c("A", "B"))
+finalplot2 = ggarrange(julianplot2, weekdayplot2, timeurbanp1, ncol = 1, nrow = 3, labels = c("A", "B", "C"))
 finalplot2
 
-ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/BIO/BIO_misc_effects_fig.png",
+ggsave(filename = "outputs/figures/BIO/BIO_time_effects_fig.png",
        plot = finalplot2,
        device = "png",
-       width = 20,
-       height = 15,
+       width = 15,
+       height = 25,
        units = "cm",
        dpi = 300,
        bg = "white")

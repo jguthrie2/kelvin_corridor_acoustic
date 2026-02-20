@@ -35,7 +35,7 @@ allindices2<-fread("outputs/full-data/allindices2.csv", header=T, sep=",")
 str(allindices2)
 
 ##add in new clyde distance (river distance)
-sitedata<- fread("data/all_site_data.csv", header=T, sep="," )
+sitedata<- fread("data/environmental_variables/all_site_data.csv", header=T, sep="," )
 sitedata$site<-as.factor(sitedata$site)
 sitedataclyde<-subset(sitedata,select=c(site,newClydedist0,newClydedist2))
 allindices2<-merge(allindices2,sitedataclyde,by="site",all=T)
@@ -280,8 +280,8 @@ NDSIdf1$streetlight_density<-NDSIdf1$streetlight_densityr*23.69028
 
 
 streetlightNDSI<-ggplot(NDSIdf1,aes(x=streetlight_density,y=preds))+
-  geom_line()+
-  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  geom_line(linewidth = 1.25, color = "#2a788e")+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2, fill = "#2a788e") +
   theme_classic()+
   xlab("Streetlight Density")+
   ylab("NDSI")+
@@ -307,8 +307,8 @@ NDSIdf2$maxse<-NDSIpreds2$fit+(NDSIpreds2$se.fit)
 NDSIdf2$julian<-NDSIdf2$julianr*158.1123
 
 julianNDSI<-ggplot(NDSIdf2,aes(x=julian,y=preds))+
-  geom_line()+
-  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  geom_line(linewidth = 1.25, color = "#2a788e")+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2, fill = "#2a788e") +
   theme_classic()+
   xlab("Day of Year")+
   ylab("NDSI")+
@@ -334,10 +334,10 @@ NDSIdf3$maxse<-NDSIpreds3$fit+(NDSIpreds3$se.fit)
 NDSIdf3$Kelvindist<-NDSIdf3$Kelvindistr*288.4527
 
 kelvinNDSI<-ggplot(NDSIdf3,aes(x=Kelvindist,y=preds))+
-  geom_line()+
-  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  geom_line(linewidth = 1.25, color = "#2a788e")+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2, fill = "#2a788e") +
   theme_classic()+
-  xlab("Distance from Riparian Corridor (m)")+
+  xlab("Distance from River (m)")+
   ylab("NDSI")+
   scale_fill_discrete(guide = 'none')+
   theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
@@ -359,8 +359,8 @@ NDSIdf4$maxse<-NDSIpreds4$fit+(NDSIpreds4$se.fit)
 NDSIdf4$prop_urban<-NDSIdf4$prop_urbanr*0.6215798
 
 urbanNDSI<-ggplot(NDSIdf4,aes(x=prop_urban,y=preds))+
-  geom_line()+
-  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2) +
+  geom_line(linewidth = 1.25, color = "#2a788e")+
+  geom_ribbon(aes(ymin = minse, ymax =  maxse),alpha=0.2, fill = "#2a788e") +
   theme_classic()+
   xlab("Proportion of Urban Land")+
   ylab("NDSI")+
@@ -382,7 +382,7 @@ bottom_row = ggarrange(kelvinNDSI, urbanNDSI, ncol = 2, labels = c("C", "D"))
 final_plotNDSI = ggarrange(top_row, bottom_row, ncol = 1)
 final_plotNDSI
 
-ggsave(filename = "kelvin_corridor_acoustic/outputs/figures/NDSI/NDSI_model_output.png",
+ggsave(filename = "outputs/figures/NDSI/NDSI_model_output.png",
        plot = final_plotNDSI,
        device = "png",
        width = 20,
