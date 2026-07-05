@@ -6,6 +6,7 @@ date: "2026-02-06"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = 'C:/Users/2298350G/Documents/My Documents/GALLANT project/kelvin_corridor_acoustic')
 library(glmmTMB)
 library(performance)
 library(dplyr)
@@ -219,21 +220,20 @@ indicesdf5rs$Kelvindistr <- scale(indicesdf5rs$Kelvindist,center=FALSE)
 ## check for collinearity (and check other model assumptions) in initial global model
 
 ```{r}
-NDSI1u<-glmmTMB(NDSI~Kelvindistr+prop_urbanr+Clydedistkmr+dist_majorroadr+streetlight_densityr+julianr+Kelvindistr*prop_urbanr+(1|site)+ar1(time_ordinalfac + 0 | date), family=beta_family(link="logit"), data=indicesdf5rs,REML=FALSE)
+NDSI1u<-glmmTMB(NDSI~Kelvindistr+prop_urbanr+dist_majorroadr+streetlight_densityr+Clydedistkmr+julianr+Kelvindistr*prop_urbanr+(1|site)+ar1(time_ordinalfac + 0 | date), family=beta_family(link="logit"), data=indicesdf5rs,REML=FALSE)
 
 
-vif(NDSI1u)
 check_collinearity(NDSI1u)
 
 summary(NDSI1u)
 
 hist(resid(NDSI1u))
 
-NDSI1uresid <- simulateResiduals(fittedModel = NDSI1u,re.form=NA)
+NDSI1uresid <- simulateResiduals(fittedModel = NDSI1u,simulateREs = "unconditional")
 
 plotQQunif(NDSI1uresid)
 
-plotResiduals(NDSI1resid)
+plotResiduals(NDSI1uresid)
 
 ```
 
@@ -242,7 +242,7 @@ plotResiduals(NDSI1resid)
 ### model selection - remove interaction
 
 ```{r}
-NDSI2u<-glmmTMB(NDSI~Kelvindistr+prop_urbanr+Clydedistkmr+dist_majorroadr+streetlight_densityr+julianr+(1|site)+ar1(time_ordinalfac + 0 | date), family=beta_family(link="logit"), data=indicesdf5rs,REML=FALSE)
+NDSI2u<-glmmTMB(NDSI~Kelvindistr+prop_urbanr+dist_majorroadr+streetlight_densityr+Clydedistkmr+julianr+(1|site)+ar1(time_ordinalfac + 0 | date), family=beta_family(link="logit"), data=indicesdf5rs,REML=FALSE)
 
 lrtest(NDSI1u,NDSI2u)
 AIC(NDSI1u,NDSI2u)
@@ -253,7 +253,7 @@ summary(NDSI2u)
 ###examine residuals again
 summary(NDSI2u)
 hist(resid(NDSI2u))
-NDSI2uresid <- simulateResiduals(fittedModel = NDSI2u,re.form=NA)
+NDSI2uresid <- simulateResiduals(fittedModel = NDSI2u)
 plotQQunif(NDSI2uresid)
 plotResiduals(NDSI2uresid)
 
@@ -269,7 +269,7 @@ plotResiduals(NDSI2uresid)
 ### plots
 
 ```{r}
-NDSIdf1 = data.frame(streetlight_densityr =rep(seq(min(indicesdf5rs$streetlight_densityr ), max(indicesdf5rs$streetlight_densityr),by=0.5),length=999),site="E1",julianr= rep(mean(indicesdf5rs$julianr ),length=999), Kelvindistr= rep(mean(indicesdf5rs$Kelvindistr ),length=999), prop_urbanr= rep(mean(indicesdf5rs$prop_urbanr ),length=999),Clydedistkmr= rep(mean(indicesdf5rs$Clydedistkmr ),length=999),dist_majorroadr= rep(mean(indicesdf5rs$dist_majorroadr ),length=999), time_ordinalfac="60",date="2023-04-03")
+NDSIdf1 = data.frame(streetlight_densityr =rep(seq(min(indicesdf5rs$streetlight_densityr ), max(indicesdf5rs$streetlight_densityr),by=0.05),length=999),site="E1",julianr= rep(mean(indicesdf5rs$julianr ),length=999), Kelvindistr= rep(mean(indicesdf5rs$Kelvindistr ),length=999), prop_urbanr= rep(mean(indicesdf5rs$prop_urbanr ),length=999),Clydedistkmr= rep(mean(indicesdf5rs$Clydedistkmr ),length=999),dist_majorroadr= rep(mean(indicesdf5rs$dist_majorroadr ),length=999), time_ordinalfac="60",date="2023-04-03")
 NDSIpreds1<-predict(NDSI2u,newdata=NDSIdf1, se.fit=TRUE,type="response")
 NDSIpreds1<-as.data.frame(NDSIpreds1)
 NDSIdf1$preds<-NDSIpreds1$fit
@@ -287,7 +287,8 @@ streetlightNDSI<-ggplot(NDSIdf1,aes(x=streetlight_density,y=preds))+
   ylab("NDSI")+
   scale_fill_discrete(guide = 'none')+
   theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
-  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))
+  theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))+
+  ylim(0.1, 0.9)
 
 streetlightNDSI
 
@@ -315,7 +316,8 @@ julianNDSI<-ggplot(NDSIdf2,aes(x=julian,y=preds))+
   scale_fill_discrete(guide = 'none')+
   theme(axis.text.x = element_text(size = 13),axis.text.y = element_text(size = 13))+
   theme(axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))+
-  scale_x_continuous(breaks=c(100,150,200),labels=c("10/04","30/05","19/07"))
+  scale_x_continuous(breaks=c(100,150,200),labels=c("10/04","30/05","19/07"))+
+  ylim(0.1, 0.9)
 
 julianNDSI
 ```
@@ -384,6 +386,15 @@ final_plotNDSI
 
 ggsave(filename = "outputs/figures/NDSI/NDSI_model_output.png",
        plot = final_plotNDSI,
+       device = "png",
+       width = 20,
+       height = 15,
+       units = "cm",
+       dpi = 300,
+       bg = "white")
+
+ggsave(filename = "outputs/figures/NDSI/NDSI_model_output_significant_only_same_axis.png",
+       plot = top_row,
        device = "png",
        width = 20,
        height = 15,

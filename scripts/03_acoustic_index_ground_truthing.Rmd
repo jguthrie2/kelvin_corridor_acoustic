@@ -7,6 +7,7 @@ date: "2026-02-05"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = 'C:/Users/2298350G/Documents/My Documents/GALLANT project/kelvin_corridor_acoustic')
 library(tuneR)
 library(seewave)
 library(soundecology)
@@ -231,4 +232,53 @@ cor.test(testdata$mean2,testdata$geophony_duration,method="kendall")#insignifica
 
 
 bioacoustic index shows strongest correlation with biophony metrics
+
+
+
+plots
+
+plot NDSI against biophony duration and anthrophony duration
+
+plot BIO against biophony duration and diversity
+
+
+```{r}
+NDSIplot1 <- ggscatter(testdata, x = "biophony_duration", y = "NDSI", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "kendall",
+          xlab = "Biophony Duration (s)", ylab = "NDSI")
+
+NDSIplot2 <- ggscatter(testdata, x = "anthrophony_duration", y = "NDSI", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "kendall",
+          xlab = "Anthrophony Duration (s)", ylab = "NDSI")
+
+BIOplot1 <- ggscatter(testdata, x = "biophony_duration", y = "BIOrescale", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "kendall",
+          xlab = "Biophony Duration (s)", ylab = "BIO")
+
+BIOplot2 <- ggscatter(testdata, x = "biophony_diversity", y = "BIOrescale", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "kendall",
+          xlab = "Biophony Diversity", ylab = "BIO")
+
+
+
+top_row = ggarrange(NDSIplot1, NDSIplot2, ncol = 2, labels = c("A", "B"))
+bottom_row = ggarrange(BIOplot1, BIOplot2, ncol = 2, labels = c("C", "D"))
+final_plot = ggarrange(top_row, bottom_row, ncol = 1)
+final_plot
+
+ggsave(filename = "outputs/figures/index_validation.png",
+       plot = final_plot,
+       device = "png",
+       width = 20,
+       height = 15,
+       units = "cm",
+       dpi = 300,
+       bg = "white")
+
+```
+
 
