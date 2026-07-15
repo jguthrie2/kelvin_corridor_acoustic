@@ -17,6 +17,7 @@ library(ggplot2)
 library(glmmTMB)
 library(pscl)
 library(lmtest)
+library(ggpubr)
 ```
 
 
@@ -246,12 +247,12 @@ plot BIO against biophony duration and diversity
 NDSIplot1 <- ggscatter(testdata, x = "biophony_duration", y = "NDSI", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.method = "kendall",
-          xlab = "Biophony Duration (s)", ylab = "NDSI")
+          xlab = "Biophony Duration (s)", ylab = "NDSI", cor.coeff.args = list(label.x = 3, label.y = 1))
 
 NDSIplot2 <- ggscatter(testdata, x = "anthrophony_duration", y = "NDSI", 
           add = "reg.line", conf.int = TRUE, 
           cor.coef = TRUE, cor.method = "kendall",
-          xlab = "Anthrophony Duration (s)", ylab = "NDSI")
+          xlab = "Anthrophony Duration (s)", ylab = "NDSI", cor.coeff.args = list(label.x = 25, label.y = 1))
 
 BIOplot1 <- ggscatter(testdata, x = "biophony_duration", y = "BIOrescale", 
           add = "reg.line", conf.int = TRUE, 
